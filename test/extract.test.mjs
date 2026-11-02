@@ -102,6 +102,10 @@ test('collectDueEvents 过期超出 overdueDays 的不再提醒', () => {
   assert.deepEqual(overdue.map((e) => `${e.item.id}:${e.kind}`).sort(), []);
 });
 
+test('collectDueEvents 缺少时间窗参数时报错', () => {
+  assert.throws(() => collectDueEvents([]), /windowHours/);
+});
+
 test('kindLabel 文案', () => {
   assert.equal(kindLabel('submit'), '提交截止');
   assert.equal(kindLabel('peerreview'), '互评截止');

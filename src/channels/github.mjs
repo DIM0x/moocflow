@@ -54,7 +54,7 @@ export function buildCommentBody(doc, now = Date.now()) {
   lines.push('## 📬 MOOC 截止提醒');
   lines.push('');
   lines.push(
-    `共 **${due.length}** 项即将截止（${doc.windowHours || 72} 小时内），**${overdue.length}** 项已过期未完成。`
+    `共 **${due.length}** 项即将截止（${doc.windowHours} 小时内），**${overdue.length}** 项已过期未完成。`
   );
   if (Array.isArray(s.failures) && s.failures.length > 0) {
     lines.push('');

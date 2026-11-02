@@ -177,13 +177,15 @@ export function kindLabel(kind) {
  * 按时间窗筛出需要提醒的事件。
  * 每个条目最多产生两类事件：提交截止（deadline）与互评截止（evaluateEnd，仅启用互评的作业）。
  * @param {Array<object>} items
- * @param {object} opts { now, windowHours, overdueDays }
+ * @param {object} opts { now?, windowHours, overdueDays } —— windowHours/overdueDays 必填
  * @returns {{ due: Array, overdue: Array }}
  */
-export function collectDueEvents(items, opts = {}) {
-  const now = opts.now ?? Date.now();
-  const windowMs = (opts.windowHours ?? 72) * 3600 * 1000;
-  const overdueMs = (opts.overdueDays ?? 7) * 24 * 3600 * 1000;
+export function collectDueEvents(items, { now = Date.now(), windowHours, overdueDays } = {}) {
+  if (!Number.isFinite(windowHours) || !Number.isFinite(overdueDays)) {
+    throw new Error('collectDueEvents 需要有效的 windowHours / overdueDays');
+  }
+  const windowMs = windowHours * 3600 * 1000;
+  const overdueMs = overdueDays * 24 * 3600 * 1000;
   const due = [];
   const overdue = [];
 

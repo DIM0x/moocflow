@@ -49,7 +49,7 @@ GET https://www.icourse163.org/  (Cookie 中带 STUDY_PERSIST)
   → 200 Set-Cookie: 新的 STUDY_SESS、轮换后的 STUDY_PERSIST、STUDY_INFO
 ```
 
-在 Actions 中，`COOKIE_REFRESH_MODE`、`MOOC_COOKIE_SECRET_NAME` 放在仓库 **Variables**；`MOOC_REFRESH_PAT` 放在 **Secrets**。
+在 Actions 中，非敏感配置（`COOKIE_REFRESH_MODE`、`MOOC_COOKIE_SECRET_NAME`、`DUE_WINDOW_HOURS`、`OVERDUE_DAYS`、`NOTIFY_CHANNEL`、`REMINDERS_FILE`、`SMTP_SECURE`、`REMINDER_ISSUE_NUMBER`）放在仓库 **Variables**；Cookie、PAT 以及 mail 渠道的 SMTP 项按现有 workflow 放在 **Secrets**（见步骤 3）。除 `REMINDER_ISSUE_NUMBER` 外，这些 Variable 留空时回退到 `src/config.mjs` 的默认值。
 
 模式 2 的 PAT 要求：
 
@@ -85,6 +85,8 @@ GET https://www.icourse163.org/  (Cookie 中带 STUDY_PERSIST)
    | `SMTP_FROM` | 可选，发件人地址，默认同 SMTP_USER |
    | `NOTIFY_TO` | 收件人邮箱，多个用逗号分隔 |
 
+   `SMTP_SECURE` 是仓库 Variable（不是 Secret），留空时按端口推断。
+
 4. 手动触发 workflow（Actions → mooc deadline reminder → Run workflow）验证，之后即可全自动运行。
 
 ## 本地运行 / 测试
@@ -100,6 +102,8 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 
 ## 环境变量
 
+代码中的默认值统一由 `src/config.mjs` 的 `DEFAULTS` 定义；修改后需同步本表。
+
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `MOOC_COOKIE` | 必填（检测步骤） | 完整浏览器 Cookie 串（自动刷新需要其中包含 `STUDY_PERSIST`） |
@@ -107,11 +111,17 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `MOOC_REFRESH_PAT` | 模式 `2` 必填 | Fine-grained PAT，目标仓库 Secrets 读写权限 |
 | `MOOC_COOKIE_SECRET_NAME` | `MOOC_COOKIE` | 模式 `2` 要覆盖保存的 Secret 名称 |
 | `MOOC_COURSES_FILE` | `courses.txt` | 课程配置路径；每行一个课程 URL，`.json` 结尾则按旧 JSON 格式读取 |
-| `DUE_WINDOW_HOURS` | `72` | 即将截止提醒窗口（小时） |
-| `OVERDUE_DAYS` | `7` | 已过期任务仍在提醒范围内的天数 |
+| `DUE_WINDOW_HOURS` | `48` | 即将截止提醒窗口（小时） |
+| `OVERDUE_DAYS` | `3` | 已过期任务仍在提醒范围内的天数 |
 | `REMINDERS_FILE` | `reminders.json` | 两步骤间传递的提醒文档路径（两步需一致） |
-| `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail` |
+| `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail`；留空默认 `github` |
 | `REMINDER_ISSUE_NUMBER` | github 渠道必填 | 手动创建的提醒 issue 编号（仓库 Variable） |
+| `SMTP_HOST` | mail 渠道必填 | SMTP 服务器 |
+| `SMTP_PORT` | `465` | SMTP 端口 |
+| `SMTP_SECURE` | 端口为 `465` 时 `true` | 是否使用 TLS；留空按端口推断 |
+| `SMTP_USER` / `SMTP_PASS` | mail 渠道必填 | SMTP 账号与授权码（不是登录密码） |
+| `SMTP_FROM` | 同 `SMTP_USER` | 发件人地址 |
+| `NOTIFY_TO` | mail 渠道必填 | 收件人地址，多个用逗号分隔 |
 
 ## 已知边界
 

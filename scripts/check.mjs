@@ -3,19 +3,19 @@
  * 步骤一（检测）：读取课程配置 → 逐课拉取解析 → 把需要提醒的事件写入约定文件。
  * 不负责任何提醒的发送；发送见 scripts/notify.mjs。
  *
- * 课程配置（MOOC_COURSES_FILE，默认 courses.txt）：每行一个课程 URL，运行时
+ * 课程配置（MOOC_COURSES_FILE）：每行一个课程 URL，运行时
  * 解析为 courses.json 等价结构；.json 结尾的文件仍按旧 JSON 格式读取。
  *
- * 环境变量：
+ * 环境变量（默认值统一定义在 src/config.mjs 的 DEFAULTS 中）：
  *   MOOC_COOKIE             完整浏览器 Cookie 串（必须；自动刷新需要其中的 STUDY_PERSIST）
- *   COOKIE_REFRESH_MODE     Cookie 更新方式：0=不刷新（默认）；1=刷新但只在本次运行使用；
+ *   COOKIE_REFRESH_MODE     Cookie 更新方式：0=不刷新；1=刷新但只在本次运行使用；
  *                           2=刷新并用 PAT 覆盖保存到 GitHub Secret
  *   MOOC_REFRESH_PAT        模式 2 必填：Fine-grained PAT，需目标仓库 Secrets 读写权限
- *   MOOC_COOKIE_SECRET_NAME 模式 2 可覆盖的 Secret 名（默认 MOOC_COOKIE）
- *   MOOC_COURSES_FILE       课程配置路径（默认 courses.txt，可参考 courses.example.txt）
- *   DUE_WINDOW_HOURS        即将截止窗口（小时，默认 72）
- *   OVERDUE_DAYS            已过期但仍在提醒范围的天数（默认 7）
- *   REMINDERS_FILE          提醒文档输出路径（默认 reminders.json）
+ *   MOOC_COOKIE_SECRET_NAME 模式 2 可覆盖的 Secret 名
+ *   MOOC_COURSES_FILE       课程配置路径（可参考 courses.example.txt）
+ *   DUE_WINDOW_HOURS        即将截止窗口（小时）
+ *   OVERDUE_DAYS            已过期但仍在提醒范围的天数
+ *   REMINDERS_FILE          提醒文档输出路径
  *
  * 退出码：0 = 正常（含无提醒、部分课程失败）；1 = 全部课程失败或无 Cookie 等硬错误。
  */
@@ -28,26 +28,30 @@ import { updateGitHubSecret } from '../src/github-secret.mjs';
 import { extractItems, collectDueEvents, kindLabel, formatBeijing, formatRemaining } from '../src/extract.mjs';
 import { buildReminderDoc } from '../src/report.mjs';
 import { parseCourses } from '../src/courses.mjs';
+import { resolveDetectionConfig } from '../src/config.mjs';
 
 const env = process.env;
-const windowHours = Number(env.DUE_WINDOW_HOURS || 72);
-const overdueDays = Number(env.OVERDUE_DAYS || 7);
-const remindersFile = resolve(env.REMINDERS_FILE || 'reminders.json');
-const refreshModeRaw = env.COOKIE_REFRESH_MODE;
-const refreshMode = refreshModeRaw === undefined || refreshModeRaw === '' ? 0 : Number(refreshModeRaw);
-const cookieSecretName = env.MOOC_COOKIE_SECRET_NAME || 'MOOC_COOKIE';
 
-function loadCourses() {
-  const file = resolve(env.MOOC_COURSES_FILE || 'courses.txt');
+function loadConfig() {
+  try {
+    return resolveDetectionConfig(env);
+  } catch (e) {
+    console.error(`[moocflow] ${e.message}`);
+    process.exit(1);
+  }
+}
+
+function loadCourses(file) {
+  const resolvedFile = resolve(file);
   let raw;
   try {
-    raw = readFileSync(file, 'utf8');
+    raw = readFileSync(resolvedFile, 'utf8');
   } catch {
-    console.error(`[moocflow] 找不到课程配置 ${file}，请参考 courses.example.txt 创建（每行一个课程 URL）`);
+    console.error(`[moocflow] 找不到课程配置 ${resolvedFile}，请参考 courses.example.txt 创建（每行一个课程 URL）`);
     process.exit(1);
   }
   try {
-    return parseCourses(file, raw);
+    return parseCourses(resolvedFile, raw);
   } catch (e) {
     console.error(`[moocflow] 课程配置解析失败：${e.message}`);
     process.exit(1);
@@ -96,14 +100,12 @@ async function fetchCourses(cookie, courses) {
 }
 
 async function main() {
-  const courses = loadCourses();
+  const { windowHours, overdueDays, refreshMode, cookieSecretName, coursesFile, remindersFile } = loadConfig();
+  const reminderPath = resolve(remindersFile);
+  const courses = loadCourses(coursesFile);
   const cookie = env.MOOC_COOKIE;
   if (!cookie) {
     console.error('[moocflow] 未设置 MOOC_COOKIE 环境变量');
-    process.exit(1);
-  }
-  if (![0, 1, 2].includes(refreshMode)) {
-    console.error(`[moocflow] COOKIE_REFRESH_MODE 只能是 0/1/2（当前：${refreshModeRaw}）`);
     process.exit(1);
   }
   if (refreshMode === 2) {
@@ -179,8 +181,8 @@ async function main() {
     overdue,
     now
   });
-  writeFileSync(remindersFile, JSON.stringify(doc, null, 2));
-  console.log(`[moocflow] 提醒文档已写入 ${remindersFile}（due=${due.length} overdue=${overdue.length}）`);
+  writeFileSync(reminderPath, JSON.stringify(doc, null, 2));
+  console.log(`[moocflow] 提醒文档已写入 ${reminderPath}（due=${due.length} overdue=${overdue.length}）`);
 }
 
 main().catch((e) => {

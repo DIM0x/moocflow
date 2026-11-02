@@ -1,15 +1,16 @@
 /**
- * 通知渠道注册表。渠道切换：NOTIFY_CHANNEL=github（默认）/ mail。
+ * 通知渠道注册表。渠道切换：NOTIFY_CHANNEL=github（默认，见 src/config.mjs）/ mail。
  * 新增渠道：在 src/channels/ 下新建 <名字>.mjs 实现统一契约（见 mail.mjs 头注释），
  * 再在下面 import + 注册一行即可，scripts/notify.mjs 与检测逻辑零改动。
  */
 
 import * as mail from './mail.mjs';
 import * as github from './github.mjs';
+import { DEFAULTS } from '../config.mjs';
 
 const CHANNELS = { mail, github };
 
-export const DEFAULT_CHANNEL = 'github';
+export const DEFAULT_CHANNEL = DEFAULTS.notifyChannel;
 
 export function availableChannels() {
   return Object.keys(CHANNELS);

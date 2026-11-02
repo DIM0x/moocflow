@@ -12,6 +12,7 @@
 
 import nodemailer from 'nodemailer';
 import { kindLabel, formatBeijing, formatRemaining } from '../extract.mjs';
+import { DEFAULTS } from '../config.mjs';
 
 export const name = 'mail';
 
@@ -20,13 +21,16 @@ export function isConfigured(env) {
 }
 
 function smtpConfigFromEnv(env) {
+  const port = Number(env.SMTP_PORT || DEFAULTS.smtpPort);
+  const secureRaw = env.SMTP_SECURE;
+  const secure =
+    secureRaw == null || String(secureRaw).trim() === ''
+      ? port === DEFAULTS.smtpPort
+      : secureRaw !== 'false';
   return {
     host: env.SMTP_HOST,
-    port: Number(env.SMTP_PORT || 465),
-    secure:
-      env.SMTP_SECURE !== undefined
-        ? env.SMTP_SECURE !== 'false'
-        : Number(env.SMTP_PORT || 465) === 465,
+    port,
+    secure,
     auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
     from: env.SMTP_FROM || env.SMTP_USER,
     to: env.NOTIFY_TO
@@ -41,7 +45,7 @@ function groupEvents(doc) {
   };
 }
 
-export function buildMessage(events, { now = Date.now(), windowHours = 72 } = {}) {
+export function buildMessage(events, { now = Date.now(), windowHours } = {}) {
   const { due, overdue } = events;
   const lines = [];
   const htmlRows = [];
@@ -113,7 +117,7 @@ export async function deliver(doc, env, now = Date.now()) {
   const grouped = groupEvents(doc);
   const { text, html } = buildMessage(grouped, { now, windowHours: doc.windowHours });
   const subject =
-    `[MOOC提醒] ${grouped.due.length} 项任务将在${doc.windowHours || 72}小时内截止` +
+    `[MOOC提醒] ${grouped.due.length} 项任务将在${doc.windowHours}小时内截止` +
     (grouped.overdue.length > 0 ? `，${grouped.overdue.length} 项已过期` : '');
   const info = await sendMail(cfg, { subject, text, html });
   return { sent: true, detail: `邮件已发送：${info.messageId}` };

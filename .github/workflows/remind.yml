@@ -20,6 +20,9 @@ jobs:
   remind:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # 两个 step 共用；留空时由 src/config.mjs 提供默认值
+      REMINDERS_FILE: ${{ vars.REMINDERS_FILE }}
     steps:
       - uses: actions/checkout@v4
 
@@ -35,25 +38,25 @@ jobs:
         env:
           # Secret：完整浏览器 Cookie 串（含 NTESSTUDYSI、STUDY_SESS、STUDY_PERSIST 及身份 Cookie）
           MOOC_COOKIE: ${{ secrets.MOOC_COOKIE }}
-          # 0=不刷新（默认）；1=刷新但只本次使用；2=刷新并用 PAT 写回 Secret
-          COOKIE_REFRESH_MODE: ${{ vars.COOKIE_REFRESH_MODE || '0' }}
-          # 模式 2 可覆盖的 Secret 名，默认 MOOC_COOKIE
-          MOOC_COOKIE_SECRET_NAME: ${{ vars.MOOC_COOKIE_SECRET_NAME || 'MOOC_COOKIE' }}
+          # 0=不刷新；1=刷新但只本次使用；2=刷新并用 PAT 写回 Secret
+          COOKIE_REFRESH_MODE: ${{ vars.COOKIE_REFRESH_MODE }}
+          # 模式 2 可覆盖的 Secret 名
+          MOOC_COOKIE_SECRET_NAME: ${{ vars.MOOC_COOKIE_SECRET_NAME }}
           # 模式 2 必填：Fine-grained PAT（目标仓库 Secrets 读写权限）
           MOOC_REFRESH_PAT: ${{ secrets.MOOC_REFRESH_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          DUE_WINDOW_HOURS: '72'
-          OVERDUE_DAYS: '7'
-          REMINDERS_FILE: reminders.json
+          # 仓库 Variables；留空时由 src/config.mjs 提供默认值
+          DUE_WINDOW_HOURS: ${{ vars.DUE_WINDOW_HOURS }}
+          OVERDUE_DAYS: ${{ vars.OVERDUE_DAYS }}
         run: node scripts/check.mjs
 
       # 步骤二：发送。只读取上面的提醒文档，与检测逻辑解耦。
-      # NOTIFY_CHANNEL=github（默认）：向手动创建的提醒 issue 追加评论，借 GitHub 通知邮件送达；
-      # NOTIFY_CHANNEL=mail：改走 SMTP 邮件。两种渠道的环境变量都映射好了，切换只需改这一行。
+      # NOTIFY_CHANNEL=github（默认，见 src/config.mjs）：向手动创建的提醒 issue 追加评论，借 GitHub 通知邮件送达；
+      # NOTIFY_CHANNEL=mail：改走 SMTP 邮件。切换只需设置仓库 Variable NOTIFY_CHANNEL。
       - name: Send notification
         env:
-          REMINDERS_FILE: reminders.json
-          NOTIFY_CHANNEL: github
+          # 仓库 Variable；留空时由 src/config.mjs 回退到默认渠道
+          NOTIFY_CHANNEL: ${{ vars.NOTIFY_CHANNEL }}
           # github 渠道所需
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -61,6 +64,8 @@ jobs:
           # mail 渠道所需
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          # 仓库 Variable；留空时按端口推断
+          SMTP_SECURE: ${{ vars.SMTP_SECURE }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SMTP_FROM: ${{ secrets.SMTP_FROM }}

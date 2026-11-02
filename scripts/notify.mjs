@@ -5,8 +5,8 @@
  * 渠道实现在 src/channels/<方式名>.mjs，用 NOTIFY_CHANNEL 切换（默认 github）。
  *
  * 环境变量：
- *   REMINDERS_FILE    提醒文档路径（默认 reminders.json，与检测步骤一致）
- *   NOTIFY_CHANNEL    通知方式：github（默认，向 issue 追加评论）/ mail（SMTP 邮件）
+ *   REMINDERS_FILE    提醒文档路径（默认见 src/config.mjs，与检测步骤一致）
+ *   NOTIFY_CHANNEL    通知方式：github（默认见 src/config.mjs，向 issue 追加评论）/ mail（SMTP 邮件）
  *   github 渠道：GITHUB_TOKEN / GITHUB_REPOSITORY（Actions 自动提供）、
  *               REMINDER_ISSUE_NUMBER（用户手动创建的提醒 issue 编号）
  *   mail 渠道：SMTP_* / NOTIFY_TO，见 src/channels/mail.mjs
@@ -18,16 +18,22 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { selectChannel } from '../src/channels/index.mjs';
+import { resolveNotifyConfig } from '../src/config.mjs';
 
 const env = process.env;
-const remindersFile = resolve(env.REMINDERS_FILE || 'reminders.json');
+const { remindersFile } = resolveNotifyConfig(env);
+const reminderPath = resolve(remindersFile);
 
 function main() {
   let doc;
   try {
-    doc = JSON.parse(readFileSync(remindersFile, 'utf8'));
+    doc = JSON.parse(readFileSync(reminderPath, 'utf8'));
   } catch (e) {
-    console.error(`[moocflow] 无法读取提醒文档 ${remindersFile}：${e.message}`);
+    console.error(`[moocflow] 无法读取提醒文档 ${reminderPath}：${e.message}`);
+    process.exit(1);
+  }
+  if (!doc || typeof doc !== 'object' || !Number.isFinite(doc.windowHours)) {
+    console.error(`[moocflow] 提醒文档 ${reminderPath} 缺少有效的 windowHours，请重新运行检测步骤`);
     process.exit(1);
   }
   const events = Array.isArray(doc.events) ? doc.events : [];
