@@ -1,0 +1,19 @@
+{
+  "name": "moocflow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GitHub Actions 云端检测中国大学MOOC任务截止时间并发送邮件提醒",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "notify": "node scripts/notify.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "dependencies": {
+    "libsodium-wrappers": "^0.8.4",
+    "nodemailer": "^6.9.15"
+  }
+}

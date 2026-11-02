@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+
+# Environment
+.env
+
+# 运行时产物：两步骤间传递的提醒文档
+reminders.json
+
+# AI 工具的本机目录
+.zcode/
+
+# 记忆文件
+MEMORY.md

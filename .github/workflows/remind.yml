@@ -1,0 +1,68 @@
+name: mooc deadline reminder
+
+on:
+  schedule:
+    # GitHub Actions 的 cron 用 UTC；以下分别是北京时间 09:00 / 21:00
+    - cron: '0 1 * * *'
+    - cron: '0 13 * * *'
+  workflow_dispatch: {}
+
+# github 渠道需要 issues: write 来向提醒 issue 追加评论
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: mooc-reminder
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # 步骤一：检测。拉取课程、解析截止时间，把待提醒事件写入约定文件
+      - name: Detect due items
+        env:
+          # Secret：完整浏览器 Cookie 串（含 NTESSTUDYSI、STUDY_SESS、STUDY_PERSIST 及身份 Cookie）
+          MOOC_COOKIE: ${{ secrets.MOOC_COOKIE }}
+          # 0=不刷新（默认）；1=刷新但只本次使用；2=刷新并用 PAT 写回 Secret
+          COOKIE_REFRESH_MODE: ${{ vars.COOKIE_REFRESH_MODE || '0' }}
+          # 模式 2 可覆盖的 Secret 名，默认 MOOC_COOKIE
+          MOOC_COOKIE_SECRET_NAME: ${{ vars.MOOC_COOKIE_SECRET_NAME || 'MOOC_COOKIE' }}
+          # 模式 2 必填：Fine-grained PAT（目标仓库 Secrets 读写权限）
+          MOOC_REFRESH_PAT: ${{ secrets.MOOC_REFRESH_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DUE_WINDOW_HOURS: '72'
+          OVERDUE_DAYS: '7'
+          REMINDERS_FILE: reminders.json
+        run: node scripts/check.mjs
+
+      # 步骤二：发送。只读取上面的提醒文档，与检测逻辑解耦。
+      # NOTIFY_CHANNEL=github（默认）：向手动创建的提醒 issue 追加评论，借 GitHub 通知邮件送达；
+      # NOTIFY_CHANNEL=mail：改走 SMTP 邮件。两种渠道的环境变量都映射好了，切换只需改这一行。
+      - name: Send notification
+        env:
+          REMINDERS_FILE: reminders.json
+          NOTIFY_CHANNEL: github
+          # github 渠道所需
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          REMINDER_ISSUE_NUMBER: ${{ vars.REMINDER_ISSUE_NUMBER }}
+          # mail 渠道所需
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+        run: node scripts/notify.mjs
