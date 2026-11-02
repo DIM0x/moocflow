@@ -38,7 +38,7 @@ jobs:
         env:
           # Secret：完整浏览器 Cookie 串（含 NTESSTUDYSI、STUDY_SESS、STUDY_PERSIST 及身份 Cookie）
           MOOC_COOKIE: ${{ secrets.MOOC_COOKIE }}
-          # 0=不刷新；1=刷新但只本次使用；2=刷新并用 PAT 写回 Secret
+          # 0=不刷新；1=刷新但只本次使用（默认）；2=刷新并用 PAT 写回 Secret
           COOKIE_REFRESH_MODE: ${{ vars.COOKIE_REFRESH_MODE }}
           # 模式 2 可覆盖的 Secret 名
           MOOC_COOKIE_SECRET_NAME: ${{ vars.MOOC_COOKIE_SECRET_NAME }}

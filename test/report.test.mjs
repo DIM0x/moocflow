@@ -44,6 +44,14 @@ test('buildReminderDoc 产出约定结构，事件扁平化并带状态', () => 
   assert.equal(doc.events[0].item.title, '第一周测验');
 });
 
+test('buildReminderDoc 仅在触发自动刷新时写入 cookieRefresh', () => {
+  const base = {
+    windowHours: 72, overdueDays: 7, coursesTotal: 1, coursesOk: 1, failures: [], due: [], overdue: [], now: 5
+  };
+  assert.equal('cookieRefresh' in buildReminderDoc(base), false);
+  assert.deepEqual(buildReminderDoc({ ...base, cookieRefresh: { mode: 2 } }).cookieRefresh, { mode: 2 });
+});
+
 test('buildReminderDoc 空事件也能产出有效文档', () => {
   const doc = buildReminderDoc({
     windowHours: 72, overdueDays: 7, coursesTotal: 1, coursesOk: 1, failures: [], due: [], overdue: [], now: 5

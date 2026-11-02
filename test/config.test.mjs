@@ -5,7 +5,7 @@ import { DEFAULTS, resolveDetectionConfig, resolveNotifyConfig } from '../src/co
 const expectedDefaults = {
   windowHours: 48,
   overdueDays: 3,
-  refreshMode: 0,
+  refreshMode: 1,
   cookieSecretName: 'MOOC_COOKIE',
   coursesFile: 'courses.txt',
   remindersFile: 'reminders.json'
@@ -69,7 +69,7 @@ test('DEFAULTS 不可变且包含预期默认值', () => {
   assert.ok(Object.isFrozen(DEFAULTS));
   assert.equal(DEFAULTS.windowHours, 48);
   assert.equal(DEFAULTS.overdueDays, 3);
-  assert.equal(DEFAULTS.refreshMode, 0);
+  assert.equal(DEFAULTS.refreshMode, 1);
   assert.equal(DEFAULTS.cookieSecretName, 'MOOC_COOKIE');
   assert.equal(DEFAULTS.coursesFile, 'courses.txt');
   assert.equal(DEFAULTS.remindersFile, 'reminders.json');

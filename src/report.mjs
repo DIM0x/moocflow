@@ -17,14 +17,16 @@ export const REMINDER_DOC_VERSION = 1;
  * @param {string[]} opts.failures   每门失败课程的错误描述
  * @param {Array<{item:object, kind:string, dueMs:number}>} opts.due     即将截止
  * @param {Array<{item:object, kind:string, dueMs:number}>} opts.overdue 已过期未完成
+ * @param {{mode:number}} [opts.cookieRefresh] 本次运行触发了自动 Cookie 刷新时传入
  * @param {number} [opts.now]
  */
-export function buildReminderDoc({ windowHours, overdueDays, coursesTotal, coursesOk, failures, due, overdue, now = Date.now() }) {
+export function buildReminderDoc({ windowHours, overdueDays, coursesTotal, coursesOk, failures, due, overdue, cookieRefresh, now = Date.now() }) {
   return {
     version: REMINDER_DOC_VERSION,
     generatedAt: new Date(now).toISOString(),
     windowHours,
     overdueDays,
+    ...(cookieRefresh ? { cookieRefresh } : {}),
     summary: {
       coursesTotal,
       coursesOk,
@@ -47,4 +49,16 @@ function flatEvent(ev, status) {
     dueMs: ev.dueMs,
     item: ev.item
   };
+}
+
+/** 自动 Cookie 刷新后的提醒文案；未触发刷新时返回 null。 */
+export function cookieRefreshNotice(cookieRefresh) {
+  const mode = cookieRefresh?.mode;
+  if (mode === 1) {
+    return '检测到 Cookie 失效，本次运行已自动刷新并仅在本轮使用；仓库 Secret 中的 Cookie 仍为已失效的旧值，请尽快手动更新。';
+  }
+  if (mode === 2) {
+    return '检测到 Cookie 失效，系统已在本次运行中自动刷新，并将新 Cookie 存储到仓库 Secret。';
+  }
+  return null;
 }

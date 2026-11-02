@@ -13,6 +13,7 @@
  */
 
 import { kindLabel, formatBeijing, formatRemaining } from '../extract.mjs';
+import { cookieRefreshNotice } from '../report.mjs';
 
 export const name = 'github';
 
@@ -65,6 +66,11 @@ export function buildCommentBody(doc, now = Date.now()) {
   lines.push('|---|---|---|---|---|');
   for (const ev of overdue) lines.push(row(ev, '⚠ 已过期', now));
   for (const ev of due) lines.push(row(ev, '🔔 即将截止', now));
+  const refreshNotice = cookieRefreshNotice(doc.cookieRefresh);
+  if (refreshNotice) {
+    lines.push('');
+    lines.push(`> 🔑 ${refreshNotice}`);
+  }
   lines.push('');
   lines.push(`<sub>—— moocflow 自动提醒 · 检测时间 ${formatBeijing(now)}（北京时间）</sub>`);
   return lines.join('\n');

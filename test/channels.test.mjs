@@ -8,7 +8,7 @@ import { buildReminderDoc } from '../src/report.mjs';
 const NOW = Date.now();
 const HOUR = 3600 * 1000;
 
-function makeDoc() {
+function makeDoc({ cookieRefresh } = {}) {
   const itemDue = {
     id: 'u1', title: '第一周测验', type: 'quiz', chapter: '第一章', lesson: '1.1',
     courseName: '测试课程', url: 'https://www.icourse163.org/learn/NEU-1002822009?tid=1488060444'
@@ -19,6 +19,7 @@ function makeDoc() {
     failures: ['坏课程: HTTP 500'],
     due: [{ item: itemDue, kind: 'submit', dueMs: NOW + 24 * HOUR }],
     overdue: [{ item: itemOver, kind: 'peerreview', dueMs: NOW - HOUR }],
+    cookieRefresh,
     now: NOW
   });
 }
@@ -51,6 +52,23 @@ test('github.buildCommentBody 渲染 markdown 表格与失败提示', () => {
   assert.match(body, /1 门课程拉取失败[^：]*：坏课程: HTTP 500/);
   // 渲染不改变文档
   assert.equal(makeDoc().events.length, 2);
+});
+
+test('两个渠道在自动刷新 Cookie 后于课程列表下方附带提示', () => {
+  const mode1 = { mode: 1 };
+  const mode2 = { mode: 2 };
+  const github1 = github.buildCommentBody(makeDoc({ cookieRefresh: mode1 }), NOW);
+  const github2 = github.buildCommentBody(makeDoc({ cookieRefresh: mode2 }), NOW);
+  assert.match(github1, /🔔 即将截止[^\n]*\n\n> 🔑 检测到 Cookie 失效.*仓库 Secret 中的 Cookie 仍为已失效/);
+  assert.match(github2, /> 🔑 检测到 Cookie 失效.*自动刷新，并将新 Cookie 存储到仓库 Secret/);
+
+  const mail1 = mail.renderPreview(makeDoc({ cookieRefresh: mode1 }), NOW);
+  const mail2 = mail.renderPreview(makeDoc({ cookieRefresh: mode2 }), NOW);
+  assert.match(mail1, /🔔即将截止【测试课程】[\s\S]*\n\n🔑 检测到 Cookie 失效.*仓库 Secret 中的 Cookie 仍为已失效/);
+  assert.match(mail2, /🔑 检测到 Cookie 失效.*自动刷新，并将新 Cookie 存储到仓库 Secret/);
+
+  assert.doesNotMatch(github.buildCommentBody(makeDoc(), NOW), /🔑/);
+  assert.doesNotMatch(mail.renderPreview(makeDoc(), NOW), /🔑/);
 });
 
 test('github 渠道契约：isConfigured 三要素', () => {

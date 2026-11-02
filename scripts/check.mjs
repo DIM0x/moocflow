@@ -122,6 +122,7 @@ async function main() {
   console.log(`[moocflow] Cookie 刷新模式：${refreshMode}`);
 
   let result = await fetchCourses(cookie, courses);
+  let cookieRefresh = null;
   const allAuthFailed =
     result.okCourses === 0 &&
     result.attempted > 0 &&
@@ -146,6 +147,7 @@ async function main() {
         } else {
           console.error('[moocflow] 模式 1：新 Cookie 仅本次运行使用，不写回 Secret');
         }
+        cookieRefresh = { mode: refreshMode };
         result = await fetchCourses(refreshed.cookie, courses);
       } catch (e) {
         console.error(`[moocflow] Cookie 自动刷新失败：${e.message}`);
@@ -179,6 +181,7 @@ async function main() {
     failures,
     due,
     overdue,
+    cookieRefresh,
     now
   });
   writeFileSync(reminderPath, JSON.stringify(doc, null, 2));

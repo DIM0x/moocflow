@@ -35,11 +35,13 @@
 
 | 值 | 行为 |
 |---|---|
-| `0`（默认） | 保持旧行为：不刷新，全部课程因鉴权失败时直接报错 |
-| `1` | 用 Cookie 里的 `STUDY_PERSIST` 静默重登；刷新后完成本次拉取和提醒，但**不保存**新 Cookie |
+| `0` | 保持旧行为：不刷新，全部课程因鉴权失败时直接报错 |
+| `1`（默认） | 用 Cookie 里的 `STUDY_PERSIST` 静默重登；刷新后完成本次拉取和提醒，但**不保存**新 Cookie |
 | `2` | 同 `1`，并用 `MOOC_REFRESH_PAT` 调 GitHub API 覆盖保存 `MOOC_COOKIE` Secret |
 
 触发条件：只有在“**所有实际拉取的课程都返回鉴权失败**”时才刷新；单门课程失败、网络错误、课程配置问题都不会触发。
+
+刷新发生时，提醒通知的课程列表下方会附带一条说明：模式 1 提示仓库 Secret 中的 Cookie 仍是已失效的旧值、需手动更新；模式 2 提示新 Cookie 已在本次运行中写回 Secret。
 
 刷新链路（2026-11-02 实测）：
 
@@ -94,7 +96,7 @@ GET https://www.icourse163.org/  (Cookie 中带 STUDY_PERSIST)
 ```bash
 npm install
 npm test                 # 单元测试（DTO 解析、事件分类、提醒文档、通知渠道、URL 解析等）
-MOOC_COOKIE="..." node scripts/check.mjs        # 步骤一：检测（默认模式 0，不自动刷新）
+MOOC_COOKIE="..." node scripts/check.mjs        # 步骤一：检测（默认模式 1，失效时自动刷新，仅本次使用）
 COOKIE_REFRESH_MODE=1 MOOC_COOKIE="..." node scripts/check.mjs  # 模式 1：失效时刷新，仅本次使用
 node scripts/notify.mjs                          # 步骤二：默认 github 渠道（未配 token 时打印 markdown 预览）
 NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未配 SMTP 时打印文本预览）
@@ -107,7 +109,7 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `MOOC_COOKIE` | 必填（检测步骤） | 完整浏览器 Cookie 串（自动刷新需要其中包含 `STUDY_PERSIST`） |
-| `COOKIE_REFRESH_MODE` | `0` | Cookie 更新方式：`0` 不刷新 / `1` 刷新但仅本次使用 / `2` 刷新并写回 Secret |
+| `COOKIE_REFRESH_MODE` | `1` | Cookie 更新方式：`0` 不刷新 / `1` 刷新但仅本次使用 / `2` 刷新并写回 Secret |
 | `MOOC_REFRESH_PAT` | 模式 `2` 必填 | Fine-grained PAT，目标仓库 Secrets 读写权限 |
 | `MOOC_COOKIE_SECRET_NAME` | `MOOC_COOKIE` | 模式 `2` 要覆盖保存的 Secret 名称 |
 | `MOOC_COURSES_FILE` | `courses.txt` | 课程配置路径；每行一个课程 URL，`.json` 结尾则按旧 JSON 格式读取 |

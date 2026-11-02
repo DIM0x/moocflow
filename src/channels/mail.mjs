@@ -12,6 +12,7 @@
 
 import nodemailer from 'nodemailer';
 import { kindLabel, formatBeijing, formatRemaining } from '../extract.mjs';
+import { cookieRefreshNotice } from '../report.mjs';
 import { DEFAULTS } from '../config.mjs';
 
 export const name = 'mail';
@@ -45,7 +46,7 @@ function groupEvents(doc) {
   };
 }
 
-export function buildMessage(events, { now = Date.now(), windowHours } = {}) {
+export function buildMessage(events, { now = Date.now(), windowHours, cookieRefresh } = {}) {
   const { due, overdue } = events;
   const lines = [];
   const htmlRows = [];
@@ -75,9 +76,11 @@ export function buildMessage(events, { now = Date.now(), windowHours } = {}) {
   for (const ev of overdue) emit(ev, '⚠已过期');
   for (const ev of due) emit(ev, '🔔即将截止');
 
+  const refreshNotice = cookieRefreshNotice(cookieRefresh);
   const text =
     `共 ${due.length} 项即将截止（${windowHours} 小时内），${overdue.length} 项已过期未完成。\n\n` +
     lines.join('\n') +
+    (refreshNotice ? `\n\n🔑 ${refreshNotice}` : '') +
     `\n\n—— moocflow 自动提醒`;
 
   const rowsHtml = htmlRows
@@ -96,6 +99,7 @@ export function buildMessage(events, { now = Date.now(), windowHours } = {}) {
   <tr style="background:#f0f0f0;"><th style="padding:4px 8px;">状态</th><th style="padding:4px 8px;">课程</th><th style="padding:4px 8px;">任务</th><th style="padding:4px 8px;">时间</th><th style="padding:4px 8px;">剩余</th></tr>
   ${rowsHtml}
 </table>
+${refreshNotice ? `<p>🔑 ${escapeHtml(refreshNotice)}</p>` : ''}
 <p style="color:#888;font-size:12px;">—— moocflow 自动提醒</p>`;
 
   return { text, html };
@@ -106,7 +110,7 @@ function escapeHtml(s) {
 }
 
 export function renderPreview(doc, now = Date.now()) {
-  return buildMessage(groupEvents(doc), { now, windowHours: doc.windowHours }).text;
+  return buildMessage(groupEvents(doc), { now, windowHours: doc.windowHours, cookieRefresh: doc.cookieRefresh }).text;
 }
 
 export async function deliver(doc, env, now = Date.now()) {
@@ -115,7 +119,7 @@ export async function deliver(doc, env, now = Date.now()) {
     return { sent: false, detail: '未配置 SMTP_HOST / SMTP_USER / SMTP_PASS / NOTIFY_TO' };
   }
   const grouped = groupEvents(doc);
-  const { text, html } = buildMessage(grouped, { now, windowHours: doc.windowHours });
+  const { text, html } = buildMessage(grouped, { now, windowHours: doc.windowHours, cookieRefresh: doc.cookieRefresh });
   const subject =
     `[MOOC提醒] ${grouped.due.length} 项任务将在${doc.windowHours}小时内截止` +
     (grouped.overdue.length > 0 ? `，${grouped.overdue.length} 项已过期` : '');

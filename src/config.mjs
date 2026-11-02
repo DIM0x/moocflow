@@ -8,7 +8,7 @@
 export const DEFAULTS = Object.freeze({
   windowHours: 48,
   overdueDays: 3,
-  refreshMode: 0,
+  refreshMode: 1,
   cookieSecretName: 'MOOC_COOKIE',
   coursesFile: 'courses.txt',
   remindersFile: 'reminders.json',
