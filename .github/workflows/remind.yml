@@ -24,9 +24,9 @@ jobs:
       # 两个 step 共用；留空时由 src/config.mjs 提供默认值
       REMINDERS_FILE: ${{ vars.REMINDERS_FILE }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
