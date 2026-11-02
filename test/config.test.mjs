@@ -7,7 +7,7 @@ const expectedDefaults = {
   overdueDays: 3,
   refreshMode: 1,
   cookieSecretName: 'MOOC_COOKIE',
-  coursesFile: 'courses.txt',
+  coursesText: '',
   remindersFile: 'reminders.json'
 };
 
@@ -19,7 +19,7 @@ test('resolveDetectionConfig 未设置或空串时使用默认值', () => {
       OVERDUE_DAYS: '   ',
       COOKIE_REFRESH_MODE: '',
       MOOC_COOKIE_SECRET_NAME: ' ',
-      MOOC_COURSES_FILE: '',
+      MOOC_COURSES: '',
       REMINDERS_FILE: ' '
     }),
     expectedDefaults
@@ -33,7 +33,7 @@ test('resolveDetectionConfig 读取显式值，并保留 0', () => {
       OVERDUE_DAYS: '7',
       COOKIE_REFRESH_MODE: '2',
       MOOC_COOKIE_SECRET_NAME: 'ALT_COOKIE',
-      MOOC_COURSES_FILE: 'my-courses.txt',
+      MOOC_COURSES: 'https://www.icourse163.org/learn/A-1?tid=2 # 课程',
       REMINDERS_FILE: 'out.json'
     }),
     {
@@ -41,7 +41,7 @@ test('resolveDetectionConfig 读取显式值，并保留 0', () => {
       overdueDays: 7,
       refreshMode: 2,
       cookieSecretName: 'ALT_COOKIE',
-      coursesFile: 'my-courses.txt',
+      coursesText: 'https://www.icourse163.org/learn/A-1?tid=2 # 课程',
       remindersFile: 'out.json'
     }
   );
@@ -80,7 +80,7 @@ test('DEFAULTS 不可变且包含预期默认值', () => {
   assert.equal(DEFAULTS.overdueDays, 3);
   assert.equal(DEFAULTS.refreshMode, 1);
   assert.equal(DEFAULTS.cookieSecretName, 'MOOC_COOKIE');
-  assert.equal(DEFAULTS.coursesFile, 'courses.txt');
+  assert.equal(DEFAULTS.coursesText, '');
   assert.equal(DEFAULTS.remindersFile, 'reminders.json');
   assert.equal(DEFAULTS.notifyChannel, 'github');
   assert.equal(DEFAULTS.smtpPort, 465);

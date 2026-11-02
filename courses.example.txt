@@ -1,8 +1,0 @@
-# moocflow 课程配置：每行一个课程 URL，# 开头为注释，空行忽略
-# 三种链接写法都认（复制浏览器地址栏即可）：
-#   https://www.icourse163.org/learn/NEU-1002822009?tid=1488060444
-#   https://www.icourse163.org/mooc/learn/NEU-1002822009/assessments?tid=1488060444
-#   https://www.icourse163.org/spoc/learn/XXX-123456?tid=1488060444
-# URL 后可用「 # 名称」给课程起显示名（省略则用课程页 DTO 里的真实名称）：
-
-https://www.icourse163.org/learn/NEU-1002822009?tid=1488060444 # 概率论与数理统计

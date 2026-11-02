@@ -10,7 +10,7 @@ export const DEFAULTS = Object.freeze({
   overdueDays: 3,
   refreshMode: 1,
   cookieSecretName: 'MOOC_COOKIE',
-  coursesFile: 'courses.txt',
+  coursesText: '',
   remindersFile: 'reminders.json',
   notifyChannel: 'github',
   smtpPort: 465,
@@ -49,7 +49,7 @@ export function resolveDetectionConfig(env = process.env) {
     overdueDays: readNonNegativeNumber(env, 'OVERDUE_DAYS', DEFAULTS.overdueDays),
     refreshMode: readRefreshMode(env),
     cookieSecretName: readString(env, 'MOOC_COOKIE_SECRET_NAME', DEFAULTS.cookieSecretName),
-    coursesFile: readString(env, 'MOOC_COURSES_FILE', DEFAULTS.coursesFile),
+    coursesText: readString(env, 'MOOC_COURSES', DEFAULTS.coursesText),
     remindersFile: readString(env, 'REMINDERS_FILE', DEFAULTS.remindersFile)
   };
 }

@@ -1,8 +1,8 @@
 /**
  * 课程配置解析。
  *
- * 用户配置 courses.txt：每行一个课程 URL（三种学习路由都认），运行时解析成
- * courses.json 等价的结构供检测代码使用；.json 结尾的路径仍按旧 JSON 格式读取。
+ * 用户配置来自 MOOC_COURSES（仓库 Variable 或本地环境变量），每行一个课程 URL
+ * （也支持分号分隔，三种学习路由都认），运行时解析成课程条目供检测代码使用。
  *
  * parseLearnHref / isContentDetailHref 移植自参考项目 MOOC_reminder
  * （src/shared/icourse163-api.js，同名函数），包括三个实战结论：
@@ -49,7 +49,7 @@ export function parseLearnHref(href) {
 }
 
 /**
- * 由课程链接构造 courses 条目（courses.json 等价结构）。
+ * 由课程链接构造课程条目。
  * name 可选：DTO 解析时会以课程真实名兜底（extractItems 的 courseName 逻辑）。
  * @param {string} href
  * @param {string} [name]
@@ -71,14 +71,14 @@ export function toCourseEntry(href, name) {
 }
 
 /**
- * 解析 courses.txt 行式配置。
+ * 解析行式课程配置文本。
  * 规则：每行一个课程 URL；空行与 # 开头的整行注释跳过；
  * URL 后可用空格加 "# 名称" 给课程命名（URL 内部的 #/learn/... hash 不受影响，
  * 因为只有「空白后紧跟 #」才被视为注释分隔）。
  * @param {string} text
  * @returns {{courses: object[], warnings: string[]}}
  */
-export function parseCoursesFile(text) {
+export function parseCoursesText(text) {
   const courses = [];
   const warnings = [];
   const seen = new Set();
@@ -112,24 +112,19 @@ export function parseCoursesFile(text) {
 }
 
 /**
- * 加载课程配置。.json 走旧 JSON 格式，其余按行式文本解析。
- * @param {string} file 配置文件路径
- * @param {string} raw  文件内容（调用方已读入）
+ * 解析 MOOC_COURSES 配置。
+ * 变量在 GitHub 设置页是单行输入，因此把分号也视作换行（课程 URL 本身不含分号）；
+ * 换行内容同样支持。
+ * @param {string} text
  * @returns {object[]} courses
  */
-export function parseCourses(file, raw) {
-  if (String(file).endsWith('.json')) {
-    const cfg = JSON.parse(raw);
-    const courses = Array.isArray(cfg) ? cfg : cfg.courses;
-    if (!Array.isArray(courses)) {
-      throw new Error(`${file} 的 JSON 结构应是 {"courses":[...]} 或课程数组`);
-    }
-    return courses;
-  }
-  const { courses, warnings } = parseCoursesFile(raw);
+export function parseCoursesInline(text) {
+  const { courses, warnings } = parseCoursesText(String(text || '').replace(/;/g, '\n'));
   for (const w of warnings) console.warn(`[moocflow] ${w}`);
   if (courses.length === 0) {
-    throw new Error(`${file} 中没有可识别的课程链接（每行一个课程 URL，# 开头为注释）`);
+    throw new Error(
+      'MOOC_COURSES 中没有可识别的课程链接（每门一个课程 URL，多门用分号或换行分隔；# 开头为注释）'
+    );
   }
   return courses;
 }

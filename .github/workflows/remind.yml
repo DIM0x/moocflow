@@ -45,6 +45,8 @@ jobs:
           # 模式 2 必填：Fine-grained PAT（目标仓库 Secrets 读写权限）
           MOOC_REFRESH_PAT: ${{ secrets.MOOC_REFRESH_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          # 课程列表（仓库 Variable，必填）：多门课程用分号或换行分隔
+          MOOC_COURSES: ${{ vars.MOOC_COURSES }}
           # 仓库 Variables；留空时由 src/config.mjs 提供默认值
           DUE_WINDOW_HOURS: ${{ vars.DUE_WINDOW_HOURS }}
           OVERDUE_DAYS: ${{ vars.OVERDUE_DAYS }}

@@ -4,8 +4,8 @@ import {
   parseLearnHref,
   isContentDetailHref,
   toCourseEntry,
-  parseCoursesFile,
-  parseCourses
+  parseCoursesText,
+  parseCoursesInline
 } from '../src/courses.mjs';
 
 // ── parseLearnHref（用例移植自参考项目 MOOC_reminder tests/unit/icourse163-api.test.mjs）──
@@ -79,9 +79,9 @@ test('toCourseEntry 构造规范条目并归一 pageUrl', () => {
   assert.equal(toCourseEntry('/learn/explore'), null);
 });
 
-// ── parseCoursesFile 行式配置 ──
+// ── parseCoursesText 行式配置 ──
 
-test('parseCoursesFile：注释、空行、命名后缀、hash 内的 # 不误判', () => {
+test('parseCoursesText：注释、空行、命名后缀、hash 内的 # 不误判', () => {
   const text = [
     '# 全行注释',
     '',
@@ -89,7 +89,7 @@ test('parseCoursesFile：注释、空行、命名后缀、hash 内的 # 不误�
     'https://www.icourse163.org/learn/BIT-268001?tid=1460270441#/learn/content',
     '  https://www.icourse163.org/spoc/learn/ZJU-2?tid=42   #  SPOC 物理课 '
   ].join('\n');
-  const { courses, warnings } = parseCoursesFile(text);
+  const { courses, warnings } = parseCoursesText(text);
   assert.equal(courses.length, 3);
   assert.equal(courses[0].name, '概率论与数理统计');
   assert.equal(courses[1].name, undefined);
@@ -99,27 +99,36 @@ test('parseCoursesFile：注释、空行、命名后缀、hash 内的 # 不误�
   assert.deepEqual(warnings, []);
 });
 
-test('parseCoursesFile：坏行给 warning、重复课程去重、全坏时报不出课程', () => {
+test('parseCoursesText：坏行给 warning、重复课程去重、全坏时报不出课程', () => {
   const text = [
     'https://www.icourse163.org/learn/NEU-1002822009?tid=1488060444',
     '/learn/explore',
     'https://www.icourse163.org/learn/NEU-1002822009/assessments?tid=1488060444#/learn/testlist'
   ].join('\n');
-  const { courses, warnings } = parseCoursesFile(text);
+  const { courses, warnings } = parseCoursesText(text);
   assert.equal(courses.length, 1); // 新旧路由同课去重
   assert.equal(warnings.length, 2); // 坏行 warning + 重复课程 warning
   assert.match(warnings[0], /无法识别/);
   assert.match(warnings[1], /重复/);
-  assert.deepEqual(parseCoursesFile('garbage-line').courses, []);
+  assert.deepEqual(parseCoursesText('garbage-line').courses, []);
 });
 
-// ── parseCourses 分发 ──
+// ── parseCoursesInline（MOOC_COURSES 变量）──
 
-test('parseCourses：.json 走旧格式，.txt 走行式，空课程报错', () => {
-  const courses = parseCourses('courses.json', '{"courses":[{"schoolCourseId":"A-1","termId":"2"}]}');
-  assert.equal(courses.length, 1);
-  assert.equal(parseCourses('courses.txt', 'https://www.icourse163.org/learn/A-1?tid=2').length, 1);
-  assert.throws(() => parseCourses('courses.txt', '# 只有注释'), /没有可识别的课程链接/);
-  assert.throws(() => parseCourses('courses.json', '{"foo":1}'), /JSON 结构/);
-  assert.throws(() => parseCourses('courses.json', '{bad json'), SyntaxError);
+test('parseCoursesInline：单行用分号分隔多门课程，保留命名后缀', () => {
+  const courses = parseCoursesInline(
+    'https://www.icourse163.org/learn/NEU-1002822009?tid=1488060444 # 概率论与数理统计; ' +
+      'https://www.icourse163.org/spoc/learn/ZJU-2?tid=42'
+  );
+  assert.equal(courses.length, 2);
+  assert.equal(courses[0].name, '概率论与数理统计');
+  assert.equal(courses[1].isSpoc, true);
+});
+
+test('parseCoursesInline：也接受换行分隔，空内容报 MOOC_COURSES 错误', () => {
+  const courses = parseCoursesInline(
+    '# 注释\nhttps://www.icourse163.org/learn/A-1?tid=2\nhttps://www.icourse163.org/learn/B-2?tid=3'
+  );
+  assert.equal(courses.length, 2);
+  assert.throws(() => parseCoursesInline('# 只有注释'), /MOOC_COURSES.*没有可识别的课程链接/);
 });

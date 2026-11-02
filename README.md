@@ -7,7 +7,7 @@
 检测与发送解耦为两个独立步骤，通过约定文件 `reminders.json` 传递：
 
 1. 每天定时（北京时间 09:00 / 21:00）由 GitHub Actions 触发 workflow
-2. **步骤一（检测）** `scripts/check.mjs`：把 `courses.txt`（每行一个课程 URL）解析为课程列表（URL 解析器移植自参考项目，三种路由通吃、排除论坛帖等伪课程链接），再用你提供的 Cookie 调用 `courseBean.getLastLearnedMocTermDto.rpc` 拉取整课 DTO，解析出全部测验/作业/考试及其截止时间、完成状态，把「N 小时内即将截止」和「已过期未完成」的事件写入 `reminders.json`（格式见 `src/report.mjs`）
+2. **步骤一（检测）** `scripts/check.mjs`：读取 `MOOC_COURSES`（仓库 Variable 或本地环境变量）里的课程 URL，解析为课程列表（URL 解析器移植自参考项目，三种路由通吃、排除论坛帖等伪课程链接），再用你提供的 Cookie 调用 `courseBean.getLastLearnedMocTermDto.rpc` 拉取整课 DTO，解析出全部测验/作业/考试及其截止时间、完成状态，把「N 小时内即将截止」和「已过期未完成」的事件写入 `reminders.json`（格式见 `src/report.mjs`）
 3. **步骤二（发送）** `scripts/notify.mjs`：读取 `reminders.json`，按 `NOTIFY_CHANNEL` 分发到 `src/channels/` 下对应渠道发送
 
 ### 通知渠道
@@ -67,14 +67,15 @@ GET https://www.icourse163.org/  (Cookie 中带 STUDY_PERSIST)
 
 ## 使用步骤
 
-1. Fork/使用本仓库，创建 `courses.txt`（参考 [courses.example.txt](courses.example.txt)）——**每行粘贴一个课程页 URL 即可**，无需手工拆字段：
+1. 在你的 fork 中进入 **Settings → Secrets and variables → Actions → Variables**，新建 `MOOC_COURSES`，值为课程页 URL；**多门课程用分号 `;` 分隔**（也接受换行分隔）。URL 后可用 ` # 名称` 起显示名：
 
    ```
-   # 每行一个课程 URL，# 开头为注释
-   https://www.icourse163.org/learn/NEU-1002822009?tid=1488060444 # 概率论与数理统计
+   https://www.icourse163.org/learn/NEU-1002822009?tid=1488060444 # 概率论与数理统计; https://www.icourse163.org/learn/BIT-268001?tid=1460270441
    ```
 
    支持三种链接写法（复制浏览器地址栏原样粘贴）：`/learn/学校-课程号?tid=…`（旧 MOOC）、`/mooc/learn/学校-课程号/…?tid=…`（2026-10 新路由）、`/spoc/learn/…`（SPOC）。URL 后可用 ` # 名称` 起显示名，省略则用课程数据里的真实名称。运行时自动解析，坏行/重复行会跳过并记 warning。
+
+   课程列表只存在仓库设置里，不产生提交，因此改完仍可直接 Sync fork。
 
 2. 在浏览器登录 icourse163.org 后，F12 → Network 复制对 `www.icourse163.org` 请求的**完整 Cookie 串**（必须包含 `NTESSTUDYSI`、`STUDY_SESS` 与身份 Cookie；只带 NTESSTUDYSI 会返回空数据）。如果要启用自动刷新，串里还必须包含 `STUDY_PERSIST`。
 
@@ -98,8 +99,8 @@ GET https://www.icourse163.org/  (Cookie 中带 STUDY_PERSIST)
 ```bash
 npm install
 npm test                 # 单元测试（DTO 解析、事件分类、提醒文档、通知渠道、URL 解析等）
-MOOC_COOKIE="..." node scripts/check.mjs        # 步骤一：检测（默认模式 1，失效时自动刷新，仅本次使用）
-COOKIE_REFRESH_MODE=1 MOOC_COOKIE="..." node scripts/check.mjs  # 模式 1：失效时刷新，仅本次使用
+MOOC_COURSES="https://... # 课程名; https://..." MOOC_COOKIE="..." node scripts/check.mjs        # 步骤一：检测（默认模式 1，失效时自动刷新，仅本次使用）
+COOKIE_REFRESH_MODE=1 MOOC_COURSES="https://..." MOOC_COOKIE="..." node scripts/check.mjs  # 模式 1：失效时刷新，仅本次使用
 node scripts/notify.mjs                          # 步骤二：默认 github 渠道（未配 token 时打印 markdown 预览）
 NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未配 SMTP 时打印文本预览）
 ```
@@ -114,7 +115,7 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `COOKIE_REFRESH_MODE` | `1` | Cookie 更新方式：`0` 不刷新 / `1` 刷新但仅本次使用 / `2` 刷新并写回 Secret |
 | `MOOC_REFRESH_PAT` | 模式 `2` 必填 | Fine-grained PAT，目标仓库 Secrets 读写权限 |
 | `MOOC_COOKIE_SECRET_NAME` | `MOOC_COOKIE` | 模式 `2` 要覆盖保存的 Secret 名称 |
-| `MOOC_COURSES_FILE` | `courses.txt` | 课程配置路径；每行一个课程 URL，`.json` 结尾则按旧 JSON 格式读取 |
+| `MOOC_COURSES` | 必填（检测步骤） | 课程列表（仓库 Variable 或本地环境变量）；多门用分号或换行分隔 |
 | `DUE_WINDOW_HOURS` | `48` | 即将截止提醒窗口（小时） |
 | `OVERDUE_DAYS` | `3` | 已过期任务仍在提醒范围内的天数 |
 | `REMINDERS_FILE` | `reminders.json` | 两步骤间传递的提醒文档路径（两步需一致） |

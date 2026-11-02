@@ -3,8 +3,7 @@
  * 步骤一（检测）：读取课程配置 → 逐课拉取解析 → 把需要提醒的事件写入约定文件。
  * 不负责任何提醒的发送；发送见 scripts/notify.mjs。
  *
- * 课程配置（MOOC_COURSES_FILE）：每行一个课程 URL，运行时
- * 解析为 courses.json 等价结构；.json 结尾的文件仍按旧 JSON 格式读取。
+ * 课程配置（MOOC_COURSES）：直接写课程 URL，多门用分号或换行分隔。
  *
  * 环境变量（默认值统一定义在 src/config.mjs 的 DEFAULTS 中）：
  *   MOOC_COOKIE             完整浏览器 Cookie 串（必须；自动刷新需要其中的 STUDY_PERSIST）
@@ -12,7 +11,7 @@
  *                           2=刷新并用 PAT 覆盖保存到 GitHub Secret
  *   MOOC_REFRESH_PAT        模式 2 必填：Fine-grained PAT，需目标仓库 Secrets 读写权限
  *   MOOC_COOKIE_SECRET_NAME 模式 2 可覆盖的 Secret 名
- *   MOOC_COURSES_FILE       课程配置路径（可参考 courses.example.txt）
+ *   MOOC_COURSES            课程列表（必填；仓库 Variable 或本地环境变量），多门用分号或换行分隔
  *   DUE_WINDOW_HOURS        即将截止窗口（小时）
  *   OVERDUE_DAYS            已过期但仍在提醒范围的天数
  *   REMINDERS_FILE          提醒文档输出路径
@@ -20,14 +19,14 @@
  * 退出码：0 = 正常（含无提醒、部分课程失败）；1 = 全部课程失败或无 Cookie 等硬错误。
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fetchTermDto, AuthExpiredError } from '../src/icourse163.mjs';
 import { refreshCookie } from '../src/cookie.mjs';
 import { updateGitHubSecret } from '../src/github-secret.mjs';
 import { extractItems, collectDueEvents, kindLabel, formatBeijing, formatRemaining } from '../src/extract.mjs';
 import { buildReminderDoc } from '../src/report.mjs';
-import { parseCourses } from '../src/courses.mjs';
+import { parseCoursesInline } from '../src/courses.mjs';
 import { resolveDetectionConfig } from '../src/config.mjs';
 
 const env = process.env;
@@ -41,17 +40,9 @@ function loadConfig() {
   }
 }
 
-function loadCourses(file) {
-  const resolvedFile = resolve(file);
-  let raw;
+function loadCourses(coursesText) {
   try {
-    raw = readFileSync(resolvedFile, 'utf8');
-  } catch {
-    console.error(`[moocflow] 找不到课程配置 ${resolvedFile}，请参考 courses.example.txt 创建（每行一个课程 URL）`);
-    process.exit(1);
-  }
-  try {
-    return parseCourses(resolvedFile, raw);
+    return parseCoursesInline(coursesText);
   } catch (e) {
     console.error(`[moocflow] 课程配置解析失败：${e.message}`);
     process.exit(1);
@@ -100,9 +91,13 @@ async function fetchCourses(cookie, courses) {
 }
 
 async function main() {
-  const { windowHours, overdueDays, refreshMode, cookieSecretName, coursesFile, remindersFile } = loadConfig();
+  const { windowHours, overdueDays, refreshMode, cookieSecretName, coursesText, remindersFile } = loadConfig();
   const reminderPath = resolve(remindersFile);
-  const courses = loadCourses(coursesFile);
+  if (!coursesText) {
+    console.error('[moocflow] 未设置 MOOC_COURSES 环境变量（仓库 Variable）');
+    process.exit(1);
+  }
+  const courses = loadCourses(coursesText);
   const cookie = env.MOOC_COOKIE;
   if (!cookie) {
     console.error('[moocflow] 未设置 MOOC_COOKIE 环境变量');

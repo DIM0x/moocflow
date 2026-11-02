@@ -7,6 +7,9 @@ node_modules/
 # Environment
 .env
 
+# 旧版文件式课程配置（现已改为 Variable；保留忽略避免误提交）
+courses.txt
+
 # 运行时产物：两步骤间传递的提醒文档
 reminders.json
 
