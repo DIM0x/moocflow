@@ -1,4 +1,9 @@
-<h1 align="center">𝒎𝒐𝒐𝒄𝒇𝒍𝒐𝒘</h1>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/moocflow-title-dark.svg">
+    <img src="assets/moocflow-title.svg" alt="moocflow" width="380">
+  </picture>
+</h1>
 
 <p align="center">基于 GitHub workflow 云端周期性检查中国大学 MOOC（icourse163.org）各类任务，截止时间临近时通过 GitHub 通知等途径提醒你。</p>
 
