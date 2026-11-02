@@ -27,6 +27,8 @@
 
 > 为什么不用 `GITHUB_TOKEN` 直接 @你？因为 GitHub 会压制 `github-actions[bot]` 的 @mention 通知，但**不压制** thread 参与者收到的评论通知——所以由你建 issue、bot 只评论，就能绕开压制且零 secret 管理。邮件延迟几分钟属正常；若在网页上先读了通知，邮件可能不发。
 
+每次发布新评论后，渠道会删除超过 `COMMENT_RETENTION_DAYS`（默认 7 天）的旧 bot 评论，避免 issue 无限变长；`0` 表示只保留最新一条。删除不会撤回已经发出的通知邮件，清理失败也只记日志、不影响提醒送达。
+
 **新增渠道**（钉钉/Telegram/PushPlus 等）：在 `src/channels/` 新建 `<名字>.mjs`，实现统一契约（`name` / `isConfigured` / `deliver` / `renderPreview`，见 `mail.mjs` 头注释），在 `channels/index.mjs` 注册一行即可，检测逻辑与其他渠道零改动。
 
 ### Cookie 自动刷新（可选）
@@ -51,7 +53,7 @@ GET https://www.icourse163.org/  (Cookie 中带 STUDY_PERSIST)
   → 200 Set-Cookie: 新的 STUDY_SESS、轮换后的 STUDY_PERSIST、STUDY_INFO
 ```
 
-在 Actions 中，非敏感配置（`COOKIE_REFRESH_MODE`、`MOOC_COOKIE_SECRET_NAME`、`DUE_WINDOW_HOURS`、`OVERDUE_DAYS`、`NOTIFY_CHANNEL`、`REMINDERS_FILE`、`SMTP_SECURE`、`REMINDER_ISSUE_NUMBER`）放在仓库 **Variables**；Cookie、PAT 以及 mail 渠道的 SMTP 项按现有 workflow 放在 **Secrets**（见步骤 3）。除 `REMINDER_ISSUE_NUMBER` 外，这些 Variable 留空时回退到 `src/config.mjs` 的默认值。
+在 Actions 中，非敏感配置（`COOKIE_REFRESH_MODE`、`MOOC_COOKIE_SECRET_NAME`、`DUE_WINDOW_HOURS`、`OVERDUE_DAYS`、`NOTIFY_CHANNEL`、`REMINDERS_FILE`、`SMTP_SECURE`、`REMINDER_ISSUE_NUMBER`、`COMMENT_RETENTION_DAYS`）放在仓库 **Variables**；Cookie、PAT 以及 mail 渠道的 SMTP 项按现有 workflow 放在 **Secrets**（见步骤 3）。除 `REMINDER_ISSUE_NUMBER` 外，这些 Variable 留空时回退到 `src/config.mjs` 的默认值。
 
 模式 2 的 PAT 要求：
 
@@ -118,6 +120,7 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `REMINDERS_FILE` | `reminders.json` | 两步骤间传递的提醒文档路径（两步需一致） |
 | `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail`；留空默认 `github` |
 | `REMINDER_ISSUE_NUMBER` | github 渠道必填 | 手动创建的提醒 issue 编号（仓库 Variable） |
+| `COMMENT_RETENTION_DAYS` | `7` | github 渠道旧评论保留天数；`0` 表示只保留最新一条 |
 | `SMTP_HOST` | mail 渠道必填 | SMTP 服务器 |
 | `SMTP_PORT` | `465` | SMTP 端口 |
 | `SMTP_SECURE` | 端口为 `465` 时 `true` | 是否使用 TLS；留空按端口推断 |

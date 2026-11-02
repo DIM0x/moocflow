@@ -61,6 +61,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           REMINDER_ISSUE_NUMBER: ${{ vars.REMINDER_ISSUE_NUMBER }}
+          # 旧 bot 评论保留天数；留空时由 src/config.mjs 回退到默认值 7
+          COMMENT_RETENTION_DAYS: ${{ vars.COMMENT_RETENTION_DAYS }}
           # mail 渠道所需
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}

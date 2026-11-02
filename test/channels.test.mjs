@@ -50,8 +50,38 @@ test('github.buildCommentBody 渲染 markdown 表格与失败提示', () => {
   assert.match(body, /\| 🔔 即将截止 \| 测试课程 \|.*\[第一周测验\]\(https:\/\/www\.icourse163\.org[^\)]*\)（测验）/);
   assert.match(body, /互评截止|提交截止/);
   assert.match(body, /1 门课程拉取失败[^：]*：坏课程: HTTP 500/);
+  // 隐藏标记用于识别本项目发布的评论，供旧评论清理使用
+  assert.match(body, /<!-- moocflow-reminder -->/);
   // 渲染不改变文档
   assert.equal(makeDoc().events.length, 2);
+});
+
+test('github 旧评论筛选：只删超过保留期的 bot 提醒评论', () => {
+  const now = Date.parse('2026-11-02T00:00:00Z');
+  const day = 24 * HOUR;
+  const bot = { type: 'Bot', login: 'github-actions[bot]' };
+  const human = { type: 'User', login: 'someone' };
+  const make = (id, daysAgo, { user = bot, body = '提醒\nmoocflow 自动提醒' } = {}) => ({
+    id,
+    user,
+    body,
+    created_at: new Date(now - daysAgo * day).toISOString()
+  });
+
+  const comments = [
+    make(1, 10), // 超期 bot 提醒：删除
+    make(2, 8, { user: human, body: '普通评论 moocflow 自动提醒' }), // 超期但由人类发布：保留
+    make(3, 9, { body: '与提醒无关的 bot 评论' }), // 超期 bot 但无签名：保留
+    make(4, 6), // 在保留期内：保留
+    make(5, 20) // 超期但就是本次刚发布的那条：保留
+  ];
+  const expired = github.selectExpiredComments(comments, now - 7 * day, 5);
+  assert.deepEqual(expired.map((c) => c.id), [1]);
+  assert.equal(github.isReminderComment(comments[0]), true);
+  assert.equal(github.isReminderComment(comments[1]), false);
+  assert.equal(github.isReminderComment(comments[2]), false);
+  assert.equal(github.isReminderComment(human), false);
+  assert.deepEqual(github.selectExpiredComments([], now, 1), []);
 });
 
 test('两个渠道在自动刷新 Cookie 后于课程列表下方附带提示', () => {

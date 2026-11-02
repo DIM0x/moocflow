@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULTS, resolveDetectionConfig, resolveNotifyConfig } from '../src/config.mjs';
+import { DEFAULTS, resolveDetectionConfig, resolveGithubConfig, resolveNotifyConfig } from '../src/config.mjs';
 
 const expectedDefaults = {
   windowHours: 48,
@@ -65,6 +65,15 @@ test('resolveNotifyConfig 未设置或留空时使用默认路径', () => {
   assert.equal(resolveNotifyConfig({ REMINDERS_FILE: ' out.json ' }).remindersFile, 'out.json');
 });
 
+test('resolveGithubConfig 评论保留天数：留空回退 7、保留 0、非法报错', () => {
+  assert.equal(resolveGithubConfig({}).commentRetentionDays, 7);
+  assert.equal(resolveGithubConfig({ COMMENT_RETENTION_DAYS: '   ' }).commentRetentionDays, 7);
+  assert.equal(resolveGithubConfig({ COMMENT_RETENTION_DAYS: '14' }).commentRetentionDays, 14);
+  assert.equal(resolveGithubConfig({ COMMENT_RETENTION_DAYS: '0' }).commentRetentionDays, 0);
+  assert.throws(() => resolveGithubConfig({ COMMENT_RETENTION_DAYS: 'abc' }), /COMMENT_RETENTION_DAYS/);
+  assert.throws(() => resolveGithubConfig({ COMMENT_RETENTION_DAYS: '-1' }), /COMMENT_RETENTION_DAYS/);
+});
+
 test('DEFAULTS 不可变且包含预期默认值', () => {
   assert.ok(Object.isFrozen(DEFAULTS));
   assert.equal(DEFAULTS.windowHours, 48);
@@ -75,4 +84,5 @@ test('DEFAULTS 不可变且包含预期默认值', () => {
   assert.equal(DEFAULTS.remindersFile, 'reminders.json');
   assert.equal(DEFAULTS.notifyChannel, 'github');
   assert.equal(DEFAULTS.smtpPort, 465);
+  assert.equal(DEFAULTS.commentRetentionDays, 7);
 });

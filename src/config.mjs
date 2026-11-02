@@ -13,7 +13,8 @@ export const DEFAULTS = Object.freeze({
   coursesFile: 'courses.txt',
   remindersFile: 'reminders.json',
   notifyChannel: 'github',
-  smtpPort: 465
+  smtpPort: 465,
+  commentRetentionDays: 7
 });
 
 function readString(env, name, fallback) {
@@ -56,5 +57,15 @@ export function resolveDetectionConfig(env = process.env) {
 export function resolveNotifyConfig(env = process.env) {
   return {
     remindersFile: readString(env, 'REMINDERS_FILE', DEFAULTS.remindersFile)
+  };
+}
+
+export function resolveGithubConfig(env = process.env) {
+  return {
+    commentRetentionDays: readNonNegativeNumber(
+      env,
+      'COMMENT_RETENTION_DAYS',
+      DEFAULTS.commentRetentionDays
+    )
   };
 }
