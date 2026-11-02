@@ -6,7 +6,7 @@
 
 检测与发送解耦为两个独立步骤，通过约定文件 `reminders.json` 传递：
 
-1. 每天定时（北京时间 09:00 / 21:00）由 GitHub Actions 触发 workflow
+1. 每天定时（北京时间 08:00 / 18:00）由 GitHub Actions 触发 workflow
 2. **步骤一（检测）** `scripts/check.mjs`：读取 `MOOC_COURSES`（仓库 Variable 或本地环境变量）里的课程 URL，解析为课程列表（URL 解析器移植自参考项目，三种路由通吃、排除论坛帖等伪课程链接），再用你提供的 Cookie 调用 `courseBean.getLastLearnedMocTermDto.rpc` 拉取整课 DTO，解析出全部测验/作业/考试及其截止时间、完成状态（SPOC 会自动解析关联的源课程，路由 term 与源课程 term 的内容都会抓取合并），把「N 小时内即将截止」和「已过期未完成」的事件写入 `reminders.json`（格式见 `src/report.mjs`）
 3. **步骤二（发送）** `scripts/notify.mjs`：读取 `reminders.json`，按 `NOTIFY_CHANNEL` 分发到 `src/channels/` 下对应渠道发送
 

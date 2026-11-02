@@ -2,9 +2,9 @@ name: mooc deadline reminder
 
 on:
   schedule:
-    # GitHub Actions 的 cron 用 UTC；以下分别是北京时间 09:00 / 21:00
-    - cron: '0 1 * * *'
-    - cron: '0 13 * * *'
+    # GitHub Actions 的 cron 用 UTC；以下分别是北京时间 08:00 / 18:00
+    - cron: '0 0 * * *'
+    - cron: '0 10 * * *'
   workflow_dispatch: {}
 
 # github 渠道需要 issues: write 来向提醒 issue 追加评论
