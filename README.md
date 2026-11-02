@@ -7,7 +7,7 @@
 检测与发送解耦为两个独立步骤，通过约定文件 `reminders.json` 传递：
 
 1. 每天定时（北京时间 09:00 / 21:00）由 GitHub Actions 触发 workflow
-2. **步骤一（检测）** `scripts/check.mjs`：读取 `MOOC_COURSES`（仓库 Variable 或本地环境变量）里的课程 URL，解析为课程列表（URL 解析器移植自参考项目，三种路由通吃、排除论坛帖等伪课程链接），再用你提供的 Cookie 调用 `courseBean.getLastLearnedMocTermDto.rpc` 拉取整课 DTO，解析出全部测验/作业/考试及其截止时间、完成状态，把「N 小时内即将截止」和「已过期未完成」的事件写入 `reminders.json`（格式见 `src/report.mjs`）
+2. **步骤一（检测）** `scripts/check.mjs`：读取 `MOOC_COURSES`（仓库 Variable 或本地环境变量）里的课程 URL，解析为课程列表（URL 解析器移植自参考项目，三种路由通吃、排除论坛帖等伪课程链接），再用你提供的 Cookie 调用 `courseBean.getLastLearnedMocTermDto.rpc` 拉取整课 DTO，解析出全部测验/作业/考试及其截止时间、完成状态（SPOC 会自动解析关联的源课程，路由 term 与源课程 term 的内容都会抓取合并），把「N 小时内即将截止」和「已过期未完成」的事件写入 `reminders.json`（格式见 `src/report.mjs`）
 3. **步骤二（发送）** `scripts/notify.mjs`：读取 `reminders.json`，按 `NOTIFY_CHANNEL` 分发到 `src/channels/` 下对应渠道发送
 
 ### 通知渠道
@@ -134,5 +134,6 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 - Cookie 会过期：模式 `0` 下提醒突然变空/报 `result 为空` 时需要重新抓一次 Cookie 更新 Secret；模式 `1`/`2` 会在全部课程鉴权失败时尝试用 `STUDY_PERSIST` 自动重登
 - 自动刷新依赖 `STUDY_PERSIST`；如果它也失效（例如 30 天到期、改密、主动登出），仍需手动更新 Cookie
 - 未做跨次运行的去重（v1 每次运行窗口内的任务都会再提醒一次），提醒频率 = 运行频率
+- SPOC 课程会额外读取公开课程介绍页来定位关联的源课程；如果平台页面改版导致解析失败，日志会给出警告并退化为只抓路由 term
 - 测验的「已用尽尝试次数」或「得分>0」才视为完成；剩余尝试次数且未得分的测验会继续提醒（防止漏刷题）
 - github 渠道的通知邮件由 GitHub 派发，到达时间不可控；追求即时/可靠送达用 `mail` 渠道

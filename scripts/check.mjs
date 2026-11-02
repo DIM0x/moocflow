@@ -21,7 +21,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fetchTermDto, AuthExpiredError } from '../src/icourse163.mjs';
+import { fetchTermDto, fetchSpocSourceTermId, AuthExpiredError } from '../src/icourse163.mjs';
 import { refreshCookie } from '../src/cookie.mjs';
 import { updateGitHubSecret } from '../src/github-secret.mjs';
 import { extractItems, collectDueEvents, kindLabel, formatBeijing, formatRemaining } from '../src/extract.mjs';
@@ -58,6 +58,82 @@ function logEvent(ev, tag) {
   );
 }
 
+/**
+ * 一门课要抓的 term 列表。
+ *
+ * SPOC 横跨两个互不重叠的 term：路由 term 装老师新增内容，源课程 term 装 OOC 内容。
+ * 只抓路由 term 的典型症状就是「SPOC 一条任务都没有」——这门课本身没有任务，
+ * 全部任务都在关联的源课程里。
+ */
+async function resolveTermIds(cookie, course) {
+  const routeTermId = String(course.termId);
+  const terms = [{ termId: routeTermId, label: '路由' }];
+  if (!course.isSpoc) return terms;
+
+  try {
+    const sourceTermId = await fetchSpocSourceTermId({
+      cookie,
+      schoolCourseId: course.schoolCourseId,
+      pageUrl: course.pageUrl
+    });
+    if (sourceTermId !== routeTermId) {
+      terms.push({ termId: sourceTermId, label: '源课程' });
+      console.log(`[moocflow]   SPOC 源课程 termId=${sourceTermId}`);
+    }
+  } catch (e) {
+    console.warn(
+      `[moocflow]   SPOC 未发现关联源课程（独立 SPOC 属正常），仅抓取路由 term：${e.message}`
+    );
+  }
+  return terms;
+}
+
+async function fetchCourseItems(cookie, course) {
+  const terms = await resolveTermIds(cookie, course);
+  const items = [];
+  const seen = new Set();
+  const errors = [];
+  let courseName = course.name || '';
+  let okTerms = 0;
+
+  for (const term of terms) {
+    try {
+      const dto = await fetchTermDto({ cookie, termId: term.termId });
+      if (!courseName) {
+        const name = [dto.courseName, dto.name, dto.termName].find(
+          (v) => typeof v === 'string' && v.trim()
+        );
+        if (name) courseName = name.trim();
+      }
+      const extracted = extractItems(dto, { ...course, termId: term.termId, name: courseName });
+      let added = 0;
+      for (const item of extracted) {
+        if (seen.has(item.id)) continue;
+        seen.add(item.id);
+        items.push(item);
+        added++;
+      }
+      okTerms++;
+      if (terms.length > 1) {
+        console.log(
+          `[moocflow]   ${term.label} term（${term.termId}）解析到 ${extracted.length} 个条目，新增 ${added} 个`
+        );
+      }
+    } catch (e) {
+      errors.push(e);
+      console.error(`[moocflow]   ${term.label} term（${term.termId}）失败：${e.message}`);
+    }
+  }
+
+  if (okTerms === 0) {
+    if (errors.every((e) => e instanceof AuthExpiredError)) {
+      throw new AuthExpiredError(errors.map((e) => e.message).join('；'));
+    }
+    throw new Error(errors.map((e) => e.message).join('；') || '没有可抓取的 term');
+  }
+  return items;
+}
+
 async function fetchCourses(cookie, courses) {
   const allItems = [];
   let okCourses = 0;
@@ -75,8 +151,7 @@ async function fetchCourses(cookie, courses) {
     attempted++;
     try {
       console.log(`[moocflow] 拉取课程 ${label}（termId=${course.termId}）…`);
-      const dto = await fetchTermDto({ cookie, termId: course.termId });
-      const items = extractItems(dto, course);
+      const items = await fetchCourseItems(cookie, course);
       console.log(`[moocflow]   解析到 ${items.length} 个条目`);
       allItems.push(...items);
       okCourses++;
