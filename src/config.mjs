@@ -71,7 +71,11 @@ export function resolveNotifyConfig(env = process.env) {
   };
 }
 
-export function resolveGithubConfig(env = process.env) {
+/**
+ * issue 评论类渠道的通用配置（原 resolveGithubConfig：issue 编号与评论保留
+ * 天数对所有「发 issue 评论」的渠道通用，不再 GitHub 专属）。
+ */
+export function resolveIssueConfig(env = process.env) {
   return {
     reminderIssueNumber: readPositiveInteger(
       env,
@@ -85,3 +89,6 @@ export function resolveGithubConfig(env = process.env) {
     )
   };
 }
+
+/** 旧名称，向后兼容。 */
+export const resolveGithubConfig = resolveIssueConfig;

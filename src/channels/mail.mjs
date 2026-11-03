@@ -13,6 +13,7 @@
 import nodemailer from 'nodemailer';
 import { kindLabel, formatBeijing, formatRemaining } from '../extract.mjs';
 import { cookieRefreshNotice } from '../report.mjs';
+import { groupEvents } from './render.mjs';
 import { DEFAULTS } from '../config.mjs';
 
 export const name = 'mail';
@@ -35,14 +36,6 @@ function smtpConfigFromEnv(env) {
     auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
     from: env.SMTP_FROM || env.SMTP_USER,
     to: env.NOTIFY_TO
-  };
-}
-
-function groupEvents(doc) {
-  const events = Array.isArray(doc.events) ? doc.events : [];
-  return {
-    due: events.filter((ev) => ev.status === 'due'),
-    overdue: events.filter((ev) => ev.status === 'overdue')
   };
 }
 
