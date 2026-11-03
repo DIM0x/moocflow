@@ -31,6 +31,8 @@
 
 **新增渠道**（钉钉/Telegram/PushPlus 等）：在 `src/channels/` 新建 `<名字>.mjs`，实现统一契约（`name` / `isConfigured` / `deliver` / `renderPreview`，见 `mail.mjs` 头注释），在 `channels/index.mjs` 注册一行即可，检测逻辑与其他渠道零改动。
 
+**新增代码托管平台的 issue 通知渠道**（Gitea/GitLab/Gitee 等）：平台的 issue 评论 API 差异（路径、鉴权头、bot 识别、字段映射）收敛为 `src/channels/issue-factory.mjs` 的平台描述对象，发布、翻页清理、渲染（`src/channels/render.mjs`）等通用流程零改动，参考 `github.mjs` 写一个描述对象并注册即可。各平台渠道彼此并列、由用户用 `NOTIFY_CHANNEL` 显式选择，不做平台自动探测。仓库坐标与令牌的环境变量解析在 `src/repo-env.mjs`（平台原生变量优先，通用别名 `REPO_SLUG`/`REPO_TOKEN` 兜底）；Cookie 写回 Secret 的平台实现在 `src/secrets.mjs`（`COOKIE_REFRESH_MODE=2` 用，当前仅 GitHub）。
+
 ### Cookie 自动刷新（可选）
 
 `COOKIE_REFRESH_MODE` 控制检测到 Cookie 失效时的行为：
@@ -61,7 +63,7 @@ GET https://www.icourse163.org/  (Cookie 中带 STUDY_PERSIST)
 - 只授权目标仓库；
 - Repository permissions 中把 **Secrets** 设为 **Read and write**；
 - 存为仓库 Secret `MOOC_REFRESH_PAT`；
-- 本地运行模式 2 时还需设置 `GITHUB_REPOSITORY=owner/repo`（Actions 中自动提供）。
+- 本地运行模式 2 时还需设置 `GITHUB_REPOSITORY=owner/repo`（Actions 中自动提供；平台无关别名 `REPO_SLUG` 同样有效）。
 
 > PAT 能修改仓库 Secret，权限较高，请只授权本仓库并定期轮换。模式 2 失败（PAT 缺失/无权限）时脚本会直接报错，不会静默跳过保存。
 
@@ -122,6 +124,8 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail`；留空默认 `github` |
 | `REMINDER_ISSUE_NUMBER` | `1` | 手动创建的提醒 issue 编号（仓库 Variable，非必填） |
 | `COMMENT_RETENTION_DAYS` | `7` | github 渠道旧评论保留天数；`0` 表示只保留最新一条 |
+| `REPO_TOKEN` / `REPO_SLUG` | 可选 | github 渠道的平台无关别名（等价 `GITHUB_TOKEN` / `GITHUB_REPOSITORY`）；平台原生变量优先。供非 Actions 环境/其他托管平台复用同一套配置名 |
+| `COOKIE_SECRET_STORE` | `github` | 模式 `2` 的 Secret 写回实现（预留，见 `src/secrets.mjs`）；未知取值报错 |
 | `SMTP_HOST` | mail 渠道必填 | SMTP 服务器 |
 | `SMTP_PORT` | `465` | SMTP 端口 |
 | `SMTP_SECURE` | 端口为 `465` 时 `true` | 是否使用 TLS；留空按端口推断 |

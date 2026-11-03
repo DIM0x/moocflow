@@ -1,6 +1,10 @@
 /**
  * 通知渠道注册表。渠道切换：NOTIFY_CHANNEL=github（默认，见 src/config.mjs）/ mail。
- * 新增渠道：在 src/channels/ 下新建 <名字>.mjs 实现统一契约（见 mail.mjs 头注释），
+ *
+ * 渠道按"平台"并列：每支持一个代码托管平台的 issue 通知，就多一个渠道名
+ * （github / gitea / gitlab / …），由用户显式配置，不做自动探测。
+ * 新增渠道：在 src/channels/ 下新建 <名字>.mjs 实现统一契约（见 mail.mjs 头注释）；
+ * 其中 issue 评论类渠道用 issue-factory.mjs 的平台描述实现（参考 github.mjs），
  * 再在下面 import + 注册一行即可，scripts/notify.mjs 与检测逻辑零改动。
  */
 
