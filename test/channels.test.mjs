@@ -101,12 +101,9 @@ test('两个渠道在自动刷新 Cookie 后于课程列表下方附带提示', 
   assert.doesNotMatch(mail.renderPreview(makeDoc(), NOW), /🔑/);
 });
 
-test('github 渠道契约：isConfigured 三要素', () => {
+test('github 渠道契约：isConfigured 只看 token 与仓库名（issue 编号有默认值）', () => {
   assert.equal(github.isConfigured({}), false);
-  assert.equal(
-    github.isConfigured({ GITHUB_TOKEN: 't', GITHUB_REPOSITORY: 'o/r', REMINDER_ISSUE_NUMBER: '1' }),
-    true
-  );
+  assert.equal(github.isConfigured({ GITHUB_TOKEN: 't', GITHUB_REPOSITORY: 'o/r' }), true);
 });
 
 test('mail 渠道契约：isConfigured 四要素、preview 输出文本', () => {
@@ -123,7 +120,7 @@ test('mail 渠道契约：isConfigured 四要素、preview 输出文本', () => 
 
 test('github.deliver 未配置时降级为 sent:false', async () => {
   const res = await github.deliver(makeDoc(), {}, NOW);
-  assert.deepEqual(res, { sent: false, detail: '未配置 GITHUB_TOKEN / GITHUB_REPOSITORY / REMINDER_ISSUE_NUMBER' });
+  assert.deepEqual(res, { sent: false, detail: '未配置 GITHUB_TOKEN / GITHUB_REPOSITORY' });
 });
 
 test('mail.deliver 未配置时降级为 sent:false', async () => {

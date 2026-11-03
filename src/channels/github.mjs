@@ -9,7 +9,8 @@
  * 需要的配置（Actions 环境大多自动提供）：
  *   GITHUB_TOKEN            自动提供；workflow 需声明 permissions: issues: write
  *   GITHUB_REPOSITORY       自动提供（"owner/repo"）
- *   REMINDER_ISSUE_NUMBER   用户手动创建提醒 issue 后，把编号存为仓库 Variable
+ *   REMINDER_ISSUE_NUMBER   用户手动创建提醒 issue 后，把编号存为仓库 Variable；
+ *                           非必填，留空默认 1（仓库首个 issue 必为 1 号，见 src/config.mjs）
  *   COMMENT_RETENTION_DAYS  旧评论保留天数（默认 7，见 src/config.mjs）；0 = 只保留最新一条
  *
  * 每次发布新评论后，会删除超过保留期的旧 bot 评论，避免 issue 无限变长。
@@ -29,7 +30,7 @@ const BODY_SIGNATURE = 'moocflow 自动提醒';
 const MARKER = '<!-- moocflow-reminder -->';
 
 export function isConfigured(env) {
-  return Boolean(env.GITHUB_TOKEN && env.GITHUB_REPOSITORY && env.REMINDER_ISSUE_NUMBER);
+  return Boolean(env.GITHUB_TOKEN && env.GITHUB_REPOSITORY);
 }
 
 function groupEvents(doc) {
@@ -116,8 +117,8 @@ export function selectExpiredComments(comments, cutoffMs, keepId) {
 }
 
 /** 评论按创建时间升序返回，碰到不早于截止时间的评论即可停止翻页。 */
-async function fetchCommentsBefore(env, cutoffMs) {
-  const base = `${API_ROOT}/repos/${env.GITHUB_REPOSITORY}/issues/${env.REMINDER_ISSUE_NUMBER}/comments`;
+async function fetchCommentsBefore(env, issueNumber, cutoffMs) {
+  const base = `${API_ROOT}/repos/${env.GITHUB_REPOSITORY}/issues/${issueNumber}/comments`;
   const collected = [];
   for (let page = 1; ; page++) {
     const res = await fetch(`${base}?per_page=100&page=${page}`, { headers: apiHeaders(env) });
@@ -143,8 +144,8 @@ async function deleteComment(env, id) {
   }
 }
 
-async function removeExpiredComments(env, keepId, cutoffMs) {
-  const comments = await fetchCommentsBefore(env, cutoffMs);
+async function removeExpiredComments(env, issueNumber, keepId, cutoffMs) {
+  const comments = await fetchCommentsBefore(env, issueNumber, cutoffMs);
   const expired = selectExpiredComments(comments, cutoffMs, keepId);
   let removed = 0;
   let failed = 0;
@@ -164,12 +165,12 @@ export async function deliver(doc, env, now = Date.now()) {
   if (!isConfigured(env)) {
     return {
       sent: false,
-      detail: '未配置 GITHUB_TOKEN / GITHUB_REPOSITORY / REMINDER_ISSUE_NUMBER'
+      detail: '未配置 GITHUB_TOKEN / GITHUB_REPOSITORY'
     };
   }
   // 先解析配置：值非法时直接报错，避免评论已发布却因清理配置失败而报发送失败
-  const { commentRetentionDays } = resolveGithubConfig(env);
-  const url = `${API_ROOT}/repos/${env.GITHUB_REPOSITORY}/issues/${env.REMINDER_ISSUE_NUMBER}/comments`;
+  const { commentRetentionDays, reminderIssueNumber } = resolveGithubConfig(env);
+  const url = `${API_ROOT}/repos/${env.GITHUB_REPOSITORY}/issues/${reminderIssueNumber}/comments`;
   const res = await fetch(url, {
     method: 'POST',
     headers: apiHeaders(env, true),
@@ -190,6 +191,7 @@ export async function deliver(doc, env, now = Date.now()) {
   try {
     const { removed, failed } = await removeExpiredComments(
       env,
+      reminderIssueNumber,
       data.id,
       now - commentRetentionDays * DAY_MS
     );

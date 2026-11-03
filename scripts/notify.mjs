@@ -8,7 +8,7 @@
  *   REMINDERS_FILE    提醒文档路径（默认见 src/config.mjs，与检测步骤一致）
  *   NOTIFY_CHANNEL    通知方式：github（默认见 src/config.mjs，向 issue 追加评论）/ mail（SMTP 邮件）
  *   github 渠道：GITHUB_TOKEN / GITHUB_REPOSITORY（Actions 自动提供）、
- *               REMINDER_ISSUE_NUMBER（用户手动创建的提醒 issue 编号）
+ *               REMINDER_ISSUE_NUMBER（用户手动创建的提醒 issue 编号，非必填，留空默认 1）
  *   mail 渠道：SMTP_* / NOTIFY_TO，见 src/channels/mail.mjs
  *
  * 退出码：0 = 正常（含无提醒、渠道未配置时的打印降级）；1 = 文档缺失/损坏、

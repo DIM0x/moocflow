@@ -14,7 +14,8 @@ export const DEFAULTS = Object.freeze({
   remindersFile: 'reminders.json',
   notifyChannel: 'github',
   smtpPort: 465,
-  commentRetentionDays: 7
+  commentRetentionDays: 7,
+  reminderIssueNumber: 1
 });
 
 function readString(env, name, fallback) {
@@ -29,6 +30,16 @@ function readNonNegativeNumber(env, name, fallback) {
   const value = Number(raw);
   if (!Number.isFinite(value) || value < 0) {
     throw new Error(`${name} 必须是不小于 0 的数字（当前：${raw}）`);
+  }
+  return value;
+}
+
+function readPositiveInteger(env, name, fallback) {
+  const raw = env[name];
+  if (raw == null || String(raw).trim() === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`${name} 必须是不小于 1 的整数（当前：${raw}）`);
   }
   return value;
 }
@@ -62,6 +73,11 @@ export function resolveNotifyConfig(env = process.env) {
 
 export function resolveGithubConfig(env = process.env) {
   return {
+    reminderIssueNumber: readPositiveInteger(
+      env,
+      'REMINDER_ISSUE_NUMBER',
+      DEFAULTS.reminderIssueNumber
+    ),
     commentRetentionDays: readNonNegativeNumber(
       env,
       'COMMENT_RETENTION_DAYS',

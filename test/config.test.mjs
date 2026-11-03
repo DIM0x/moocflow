@@ -65,6 +65,15 @@ test('resolveNotifyConfig 未设置或留空时使用默认路径', () => {
   assert.equal(resolveNotifyConfig({ REMINDERS_FILE: ' out.json ' }).remindersFile, 'out.json');
 });
 
+test('resolveGithubConfig issue 编号：留空默认 1、显式值生效、非法报错', () => {
+  assert.equal(resolveGithubConfig({}).reminderIssueNumber, 1);
+  assert.equal(resolveGithubConfig({ REMINDER_ISSUE_NUMBER: '   ' }).reminderIssueNumber, 1);
+  assert.equal(resolveGithubConfig({ REMINDER_ISSUE_NUMBER: ' 2 ' }).reminderIssueNumber, 2);
+  assert.throws(() => resolveGithubConfig({ REMINDER_ISSUE_NUMBER: 'abc' }), /REMINDER_ISSUE_NUMBER/);
+  assert.throws(() => resolveGithubConfig({ REMINDER_ISSUE_NUMBER: '0' }), /REMINDER_ISSUE_NUMBER/);
+  assert.throws(() => resolveGithubConfig({ REMINDER_ISSUE_NUMBER: '1.5' }), /REMINDER_ISSUE_NUMBER/);
+});
+
 test('resolveGithubConfig 评论保留天数：留空回退 7、保留 0、非法报错', () => {
   assert.equal(resolveGithubConfig({}).commentRetentionDays, 7);
   assert.equal(resolveGithubConfig({ COMMENT_RETENTION_DAYS: '   ' }).commentRetentionDays, 7);
@@ -85,4 +94,5 @@ test('DEFAULTS 不可变且包含预期默认值', () => {
   assert.equal(DEFAULTS.notifyChannel, 'github');
   assert.equal(DEFAULTS.smtpPort, 465);
   assert.equal(DEFAULTS.commentRetentionDays, 7);
+  assert.equal(DEFAULTS.reminderIssueNumber, 1);
 });
