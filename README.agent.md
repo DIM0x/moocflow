@@ -137,3 +137,4 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 - SPOC 课程会额外读取公开课程介绍页来定位关联的源课程；如果平台页面改版导致解析失败，日志会给出警告并退化为只抓路由 term
 - 测验的「已用尽尝试次数」或「得分>0」才视为完成；剩余尝试次数且未得分的测验会继续提醒（防止漏刷题）
 - github 渠道的通知邮件由 GitHub 派发，到达时间不可控；追求即时/可靠送达用 `mail` 渠道
+- 低活跃仓库的定时 workflow 可能被 GitHub 静默跳过（不排队、无运行记录）；若 Actions 页长期没有定时运行痕迹，先手动 Run workflow 验证配置本身无误
