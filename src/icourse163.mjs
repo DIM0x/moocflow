@@ -28,6 +28,42 @@ export class AuthExpiredError extends Error {
   }
 }
 
+/** 首次失败后最多再试 3 次，即单次抓取最多 4 次请求。 */
+const RETRY_COUNT = 3;
+
+/** 两次重试之间的固定间隔。 */
+const RETRY_DELAY_MS = 3000;
+
+/** 单次 HTTP 请求超时；没有超时的话请求挂住时重试永远不会开始。 */
+const REQUEST_TIMEOUT_MS = 15000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 重试所有类别错误（含鉴权失败），保证偶发空返回/网络抖动不会直接丢课程。
+ * 最后一次尝试仍失败时抛出原始错误，调用方现有的错误分类逻辑不受影响。
+ */
+async function withRetry(
+  task,
+  { retries = RETRY_COUNT, delayMs = RETRY_DELAY_MS, sleepImpl = sleep, onRetry } = {}
+) {
+  const maxAttempts = retries + 1;
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await task();
+    } catch (error) {
+      lastError = error;
+      if (attempt >= maxAttempts) break;
+      onRetry?.({ attempt, maxAttempts, delayMs, error });
+      await sleepImpl(delayMs);
+    }
+  }
+  throw lastError;
+}
+
 /** 从完整 Cookie 串里提取 NTESSTUDYSI 的值（同时用作 csrfKey）。 */
 export function extractCsrf(cookie) {
   const m = /NTESSTUDYSI=([^;]+)/i.exec(String(cookie || ''));
@@ -42,44 +78,60 @@ export function extractCsrf(cookie) {
  * @param {Function} [opts.fetchImpl]  可注入的 fetch（测试用）
  * @returns {Promise<object>} mocTermDto（result.mocTermDto）
  */
-export async function fetchTermDto({ cookie, termId, fetchImpl = fetch }) {
+export async function fetchTermDto({
+  cookie,
+  termId,
+  fetchImpl = fetch,
+  retries = RETRY_COUNT,
+  retryDelayMs = RETRY_DELAY_MS,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+  sleepImpl = sleep,
+  onRetry
+}) {
   const csrfKey = extractCsrf(cookie);
   if (!csrfKey) {
     throw new AuthExpiredError('Cookie 中未找到 NTESSTUDYSI，无法构造 csrfKey');
   }
   const url = `${ICOURSE_ORIGIN}/${MAIN_ENDPOINT}?csrfKey=${encodeURIComponent(csrfKey)}`;
-  const res = await fetchImpl(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json;charset=UTF-8',
-      Cookie: cookie,
-      Referer: `${ICOURSE_ORIGIN}/`,
-      'User-Agent': ICOURSE_UA
+  return withRetry(
+    async () => {
+      const res = await fetchImpl(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json;charset=UTF-8',
+          Cookie: cookie,
+          Referer: `${ICOURSE_ORIGIN}/`,
+          'User-Agent': ICOURSE_UA
+        },
+        body: JSON.stringify({ termId: String(termId) }),
+        signal: timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined
+      });
+      if (res.status === 401 || res.status === 403) {
+        throw new AuthExpiredError(`HTTP ${res.status} ${res.statusText}（termId=${termId}）`);
+      }
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} ${res.statusText}（termId=${termId}）`);
+      }
+      const data = await res.json();
+      if (data && data.code !== undefined && Number(data.code) !== 0) {
+        if (Number(data.code) === -1002) {
+          throw new AuthExpiredError(
+            `接口返回 code:-1002 ${data.message || ''}（termId=${termId}，Cookie/CSRF 可能失效）`
+          );
+        }
+        throw new Error(`接口返回 code:${data.code} ${data.message || ''}（termId=${termId}）`);
+      }
+      const dto =
+        data && data.result && data.result.mocTermDto ? data.result.mocTermDto : data && data.result;
+      if (!dto || typeof dto !== 'object') {
+        throw new AuthExpiredError(
+          `返回 result 为空（termId=${termId}）。常见原因：会话已失效、Cookie 不完整或 NTESSTUDYSI 已过期`
+        );
+      }
+      return dto;
     },
-    body: JSON.stringify({ termId: String(termId) })
-  });
-  if (res.status === 401 || res.status === 403) {
-    throw new AuthExpiredError(`HTTP ${res.status} ${res.statusText}（termId=${termId}）`);
-  }
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} ${res.statusText}（termId=${termId}）`);
-  }
-  const data = await res.json();
-  if (data && data.code !== undefined && Number(data.code) !== 0) {
-    if (Number(data.code) === -1002) {
-      throw new AuthExpiredError(
-        `接口返回 code:-1002 ${data.message || ''}（termId=${termId}，Cookie/CSRF 可能失效）`
-      );
-    }
-    throw new Error(`接口返回 code:${data.code} ${data.message || ''}（termId=${termId}）`);
-  }
-  const dto = data && data.result && data.result.mocTermDto ? data.result.mocTermDto : data && data.result;
-  if (!dto || typeof dto !== 'object') {
-    throw new AuthExpiredError(
-      `返回 result 为空（termId=${termId}）。常见原因：会话已失效、Cookie 不完整或 NTESSTUDYSI 已过期`
-    );
-  }
-  return dto;
+    { retries, delayMs: retryDelayMs, sleepImpl, onRetry }
+  );
 }
 
 /** 截取从 start（必须是 `{`）开始、花括号配平的 JS 对象字面量文本。 */
@@ -167,7 +219,12 @@ export async function fetchSpocSourceTermId({
   cookie,
   schoolCourseId,
   pageUrl,
-  fetchImpl = fetch
+  fetchImpl = fetch,
+  retries = RETRY_COUNT,
+  retryDelayMs = RETRY_DELAY_MS,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+  sleepImpl = sleep,
+  onRetry
 }) {
   const baseHeaders = {
     Referer: `${ICOURSE_ORIGIN}/`,
@@ -190,20 +247,29 @@ export async function fetchSpocSourceTermId({
   }
   if (candidates.length === 0) throw new Error('缺少 SPOC 课程标识，无法解析源课程 termId');
 
-  const errors = [];
-  for (const candidate of candidates) {
-    try {
-      const res = await fetchImpl(candidate.url, { method: 'GET', headers: candidate.headers });
-      if (!res.ok) {
-        errors.push(`${candidate.url}: HTTP ${res.status}`);
-        continue;
+  return withRetry(
+    async () => {
+      const errors = [];
+      for (const candidate of candidates) {
+        try {
+          const res = await fetchImpl(candidate.url, {
+            method: 'GET',
+            headers: candidate.headers,
+            signal: timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined
+          });
+          if (!res.ok) {
+            errors.push(`${candidate.url}: HTTP ${res.status}`);
+            continue;
+          }
+          const termId = parseSpocSourceTermId(await res.text());
+          if (termId) return termId;
+          errors.push(`${candidate.url}: 页面中未找到源课程 termId`);
+        } catch (e) {
+          errors.push(`${candidate.url}: ${e.message}`);
+        }
       }
-      const termId = parseSpocSourceTermId(await res.text());
-      if (termId) return termId;
-      errors.push(`${candidate.url}: 页面中未找到源课程 termId`);
-    } catch (e) {
-      errors.push(`${candidate.url}: ${e.message}`);
-    }
-  }
-  throw new Error(errors.join('；'));
+      throw new Error(errors.join('；'));
+    },
+    { retries, delayMs: retryDelayMs, sleepImpl, onRetry }
+  );
 }

@@ -58,6 +58,13 @@ function logEvent(ev, tag) {
   );
 }
 
+function logRetry(label, { attempt, maxAttempts, delayMs, error }) {
+  console.warn(
+    `[moocflow]   ${label} 第 ${attempt}/${maxAttempts} 次尝试失败：${error.message}；` +
+      `${delayMs / 1000} 秒后重试`
+  );
+}
+
 /**
  * 一门课要抓的 term 列表。
  *
@@ -74,7 +81,8 @@ async function resolveTermIds(cookie, course) {
     const sourceTermId = await fetchSpocSourceTermId({
       cookie,
       schoolCourseId: course.schoolCourseId,
-      pageUrl: course.pageUrl
+      pageUrl: course.pageUrl,
+      onRetry: (info) => logRetry(`SPOC 源课程解析（${course.schoolCourseId}）`, info)
     });
     if (sourceTermId !== routeTermId) {
       terms.push({ termId: sourceTermId, label: '源课程' });
@@ -98,7 +106,12 @@ async function fetchCourseItems(cookie, course) {
 
   for (const term of terms) {
     try {
-      const dto = await fetchTermDto({ cookie, termId: term.termId });
+      const termLabel = terms.length > 1 ? `${term.label} term ${term.termId}` : `term ${term.termId}`;
+      const dto = await fetchTermDto({
+        cookie,
+        termId: term.termId,
+        onRetry: (info) => logRetry(termLabel, info)
+      });
       if (!courseName) {
         const name = [dto.courseName, dto.name, dto.termName].find(
           (v) => typeof v === 'string' && v.trim()

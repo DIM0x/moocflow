@@ -113,14 +113,55 @@ test('fetchSpocSourceTermId 在介绍页没有映射时回退到学习页', asyn
   assert.match(calls[1].opts.headers.Cookie, /NTESSTUDYSI=csrf123/);
 });
 
-test('fetchSpocSourceTermId 两处都拿不到时报出失败原因', async () => {
+test('fetchSpocSourceTermId 两处都拿不到时按 4 轮尝试后报出失败原因', async () => {
+  let calls = 0;
+  const delays = [];
   await assert.rejects(
     () =>
       fetchSpocSourceTermId({
         cookie: 'NTESSTUDYSI=csrf123',
         schoolCourseId: 'NEU-1',
-        fetchImpl: async () => ok('<html></html>')
+        pageUrl: 'https://www.icourse163.org/spoc/learn/NEU-1?tid=1',
+        fetchImpl: async () => {
+          calls++;
+          return ok('<html></html>');
+        },
+        sleepImpl: async (ms) => {
+          delays.push(ms);
+        }
       }),
     /未找到源课程 termId/
   );
+  assert.equal(calls, 8);
+  assert.deepEqual(delays, [3000, 3000, 3000]);
+});
+
+test('fetchSpocSourceTermId 失败后重试并成功', async () => {
+  let calls = 0;
+  const termId = await fetchSpocSourceTermId({
+    cookie: 'NTESSTUDYSI=csrf123',
+    schoolCourseId: 'NEU-1486300165',
+    pageUrl: 'https://www.icourse163.org/spoc/learn/NEU-1486300165?tid=1488212467',
+    fetchImpl: async (url) => {
+      calls++;
+      if (calls <= 2) return new Response('err', { status: 500 });
+      return ok(url.includes('/spoc/course/') ? COURSE_PAGE_HTML : LEARN_PAGE_HTML);
+    },
+    sleepImpl: async () => {}
+  });
+  assert.equal(termId, '1488061441');
+  assert.equal(calls, 3);
+});
+
+test('fetchSpocSourceTermId 为请求设置超时信号', async () => {
+  let signal;
+  await fetchSpocSourceTermId({
+    cookie: 'NTESSTUDYSI=csrf123',
+    schoolCourseId: 'NEU-1486300165',
+    fetchImpl: async (url, opts) => {
+      signal = opts.signal;
+      return ok(COURSE_PAGE_HTML);
+    }
+  });
+  assert.ok(signal instanceof AbortSignal);
 });
