@@ -16,13 +16,13 @@
 
 | 方式 | 模块 | 原理 | 所需配置 |
 |---|---|---|---|
-| `github`（默认） | `channels/github.mjs` | 向你手动创建的提醒 issue 追加评论；你是该 issue 的参与者，GitHub 会把评论通知发到你账号的通知邮箱 | 零配置（`GITHUB_TOKEN`/`GITHUB_REPOSITORY` 由 Actions 自动提供，需自备 issue 编号） |
+| `github`（默认） | `channels/github.mjs` | 向你手动创建的提醒 issue 追加评论；你是该 issue 的参与者，GitHub 会把评论通知发到你账号的通知邮箱 | 零配置（`GITHUB_TOKEN`/`GITHUB_REPOSITORY` 由 Actions 自动提供；issue 编号非必填，默认 1） |
 | `mail` | `channels/mail.mjs` | SMTP 邮件 | `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`NOTIFY_TO` 等 |
 
 **github 渠道的首次设置**（一次性，约 2 分钟）：
 
 1. 在仓库里手动创建一个 issue（建议标题「📬 MOOC 提醒」）——注意要由**你本人**创建，这样你才是参与者、评论才会通知到你
-2. 把 issue 编号（URL 末尾数字）存为仓库 Variable：Settings → Secrets and variables → Actions → Variables → `REMINDER_ISSUE_NUMBER`
+2. 确认 issue 编号（URL 末尾数字）：新建仓库的第一个 issue 编号必然是 `1`，此时无需配置；若不是 `1`，把它存为仓库 Variable：Settings → Secrets and variables → Actions → Variables → `REMINDER_ISSUE_NUMBER`
 3. 保持 GitHub 账号的通知设置中 "Participating and @mentions" 邮件通知开启（默认开启）
 
 > 为什么不用 `GITHUB_TOKEN` 直接 @你？因为 GitHub 会压制 `github-actions[bot]` 的 @mention 通知，但**不压制** thread 参与者收到的评论通知——所以由你建 issue、bot 只评论，就能绕开压制且零 secret 管理。邮件延迟几分钟属正常；若在网页上先读了通知，邮件可能不发。
@@ -53,7 +53,7 @@ GET https://www.icourse163.org/  (Cookie 中带 STUDY_PERSIST)
   → 200 Set-Cookie: 新的 STUDY_SESS、轮换后的 STUDY_PERSIST、STUDY_INFO
 ```
 
-在 Actions 中，非敏感配置（`COOKIE_REFRESH_MODE`、`MOOC_COOKIE_SECRET_NAME`、`DUE_WINDOW_HOURS`、`OVERDUE_DAYS`、`NOTIFY_CHANNEL`、`REMINDERS_FILE`、`SMTP_SECURE`、`REMINDER_ISSUE_NUMBER`、`COMMENT_RETENTION_DAYS`）放在仓库 **Variables**；Cookie、PAT 以及 mail 渠道的 SMTP 项按现有 workflow 放在 **Secrets**（见步骤 3）。除 `REMINDER_ISSUE_NUMBER` 外，这些 Variable 留空时回退到 `src/config.mjs` 的默认值。
+在 Actions 中，非敏感配置（`COOKIE_REFRESH_MODE`、`MOOC_COOKIE_SECRET_NAME`、`DUE_WINDOW_HOURS`、`OVERDUE_DAYS`、`NOTIFY_CHANNEL`、`REMINDERS_FILE`、`SMTP_SECURE`、`REMINDER_ISSUE_NUMBER`、`COMMENT_RETENTION_DAYS`）放在仓库 **Variables**；Cookie、PAT 以及 mail 渠道的 SMTP 项按现有 workflow 放在 **Secrets**（见步骤 3）。这些 Variable 留空时都回退到 `src/config.mjs` 的默认值。
 
 模式 2 的 PAT 要求：
 
@@ -120,7 +120,7 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `OVERDUE_DAYS` | `3` | 已过期任务仍在提醒范围内的天数 |
 | `REMINDERS_FILE` | `reminders.json` | 两步骤间传递的提醒文档路径（两步需一致） |
 | `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail`；留空默认 `github` |
-| `REMINDER_ISSUE_NUMBER` | github 渠道必填 | 手动创建的提醒 issue 编号（仓库 Variable） |
+| `REMINDER_ISSUE_NUMBER` | `1` | 手动创建的提醒 issue 编号（仓库 Variable，非必填） |
 | `COMMENT_RETENTION_DAYS` | `7` | github 渠道旧评论保留天数；`0` 表示只保留最新一条 |
 | `SMTP_HOST` | mail 渠道必填 | SMTP 服务器 |
 | `SMTP_PORT` | `465` | SMTP 端口 |
