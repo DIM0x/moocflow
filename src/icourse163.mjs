@@ -1,7 +1,7 @@
 /**
  * icourse163.org web/j RPC 拉取。
  *
- * 已验证的调用方式（见 MEMORY.md 6/7 条，2026-11-01 云端全链路验证）：
+ * 已验证的调用方式（2026-11-01 云端全链路验证，背景见项目 MEMORY.md）：
  *   POST https://www.icourse163.org/web/j/courseBean.getLastLearnedMocTermDto.rpc?csrfKey={NTESSTUDYSI}
  *   Content-Type: application/json;charset=UTF-8
  *   Body: {"termId": "1488060444"}   —— 数字/字符串均可；必须带 termId，空 body 返回 result:null
