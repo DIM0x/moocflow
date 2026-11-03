@@ -43,8 +43,15 @@ moocflow的任务读取与判断逻辑大量参考了此项目。
 ### 3. 准备 Cookie
 
 1. 在浏览器中登录 [icourse163.org](https://www.icourse163.org)；
+
 2. 按 `F12` 打开开发者工具，切到 **Network（网络）** 面板并刷新页面；
-3. 点击发往 `www.icourse163.org` 的请求，在 **Request Headers** 中找到 `Cookie`，复制**完整的一整串**（需包含 `NTESSTUDYSI`、`STUDY_SESS` 以及与登录身份相关的项）。
+
+3. 点击发往 `www.icourse163.org` 的请求，在 **Request Headers** 中找到 `Cookie`，右键选择复制（需完整复制，包含 `NTESSTUDYSI`、`STUDY_SESS` 以及与登录身份相关的项）。
+
+> [!CAUTION]
+> 此 Cookie 有权限直接登录并操作你的慕课账号，且其中部分字段**可能没有有效的手动过期方式**，一旦泄露有可能无法将对方强制下线。
+>
+> 本项目已尽量避免泄露用户Cookie。配置时，请勿把 Cookie 粘贴到聊天工具、截图或公开 Issue 中，也不要自行保存Cookie副本；怀疑泄露时，请尝试重新登录及修改密码。
 
 ### 4. 填写仓库配置
 
@@ -71,6 +78,19 @@ moocflow的任务读取与判断逻辑大量参考了此项目。
 
 需要配置更多高级选项？访问 **[Wiki](https://github.com/DIM0x/moocflow/wiki)** 查看更多说明。
 
+> [!IMPORTANT]
+> 根据Github行为，每当仓库无提交活动满60天后，其workflow运行会暂时禁用。若需继续使用，请根据禁用提示邮件指引或手动前往Actions页面，点击一次启用按钮即可。
+
+> [!TIP]
+> 若提醒邮件中出现cookie过期提示，请及时重做上述步骤3更新cookie。
+
 ## 更新
 
 如果你是通过 Fork 使用本项目，更新非常简单：打开你 Fork 后的仓库，点击 **Sync fork → Update branch** 即可同步最新代码。课程列表与 Cookie 保存在仓库设置中，同步更新不会覆盖它们。
+
+## 贡献与反馈
+
+欢迎一起把 moocflow 做得更好：
+
+- **贡献代码**：修复 bug、改进任务抓取与截止判断，或者新增提醒方式。检测与发送已经解耦，在 `src/channels/` 下按统一接口实现新渠道（如钉钉、Telegram 等），再注册一行即可接入。做前先提交Issue，完成后提交 Pull Request 即可。
+- **反馈问题**：遇到漏抓任务、误报、Action 运行失败等情况，欢迎到 [Issues](https://github.com/DIM0x/moocflow/issues) 提交。请尽量附上课程类型（MOOC / SPOC）、报错日志或截图，方便快速定位。
