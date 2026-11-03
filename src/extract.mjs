@@ -4,11 +4,13 @@
  *
  * 解析规则参考了扩展项目 MOOC_reminder 的 extractHomeworkFromTermDto：
  * DTO 结构为 chapters[] → lessons[] → units[]，章节层还可能直接挂 homeworks[]/quizs[]/exam；
- * 每个条目自身带 contentType（2=测验 3=作业 6=考试），详细信息在 node.test 子对象里。
+ * 每个条目自身带 contentType（2=测验 3=作业 6=考试；2026-10 新版学习页的考试为 4），
+ * 详细信息在 node.test 子对象里，新版考试的截止/提交次数还可能只在 parts[] 子卷上。
  * 字段名可能漂移，因此处处取宽容解析，绝不因单个节点异常中断。
  */
 
-const TYPE_BY_CODE = { 2: 'quiz', 3: 'homework', 6: 'exam' };
+// 4=考试：2026-11-04 实测 NEU-1001638003 新版学习页期末考试 contentType=4（参考项目 1.2.2 漏抓的正是它）
+const TYPE_BY_CODE = { 2: 'quiz', 3: 'homework', 4: 'exam', 6: 'exam' };
 const TYPE_LABEL = { quiz: '测验', homework: '作业', exam: '考试' };
 
 const DEADLINE_FIELDS = ['deadline', 'endTime', 'submitEndTime', 'examEndTime', 'closeTime'];
@@ -48,7 +50,7 @@ function pickDeadline(node, test) {
       if (v > 0) return v;
     }
   }
-  return 0;
+  return pickFromParts(node, DEADLINE_FIELDS);
 }
 
 /** 按候选字段列表取第一个正数（node 优先于 test，参考项目同序）。 */
@@ -57,6 +59,23 @@ function pickNumber(node, test, fields) {
     if (!isObj(obj)) continue;
     for (const f of fields) {
       const v = num(obj[f]);
+      if (v > 0) return v;
+    }
+  }
+  return pickFromParts(node, fields);
+}
+
+/**
+ * parts[] 子卷兜底（对齐 MOOC_reminder 1.2.2）：2026-10 新版学习页的考试把
+ * 截止/成绩/提交次数放在 parts 子卷上，本体与 test 都没有。parts 是同一场
+ * 考试的子卷元数据而非独立条目，因此只在前面字段全部缺失时兜底读取。
+ */
+function pickFromParts(node, fields) {
+  if (!Array.isArray(node.parts)) return 0;
+  for (const part of node.parts) {
+    if (!isObj(part)) continue;
+    for (const f of fields) {
+      const v = num(part[f]);
       if (v > 0) return v;
     }
   }
@@ -110,7 +129,7 @@ export function extractItems(dto, course) {
       deadlineMs,
       score: pickNumber(node, test, SCORE_FIELDS),
       totalScore: pickNumber(node, test, TOTAL_FIELDS),
-      usedTryCount: num(node.usedTryCount ?? test?.usedTryCount),
+      usedTryCount: num(node.usedTryCount ?? test?.usedTryCount) || pickFromParts(node, ['usedTryCount']),
       trytime: num(node.trytime ?? test?.trytime),
       enableEvaluation: !!(node.enableEvaluation ?? test?.enableEvaluation),
       evaluateEndMs: num(node.evaluateEnd ?? test?.evaluateEnd),
@@ -141,7 +160,7 @@ export function extractItems(dto, course) {
     }
 
     const test = isObj(node.test) ? node.test : null;
-    const assessedCode = ['2', '3', '6'].includes(String(node.contentType ?? ''));
+    const assessedCode = ['2', '3', '4', '6'].includes(String(node.contentType ?? ''));
     const nameLooksAssessed = /测验|作业|考试|测试|quiz|exam|homework/i.test(str(node.name));
     if (assessedCode || nameLooksAssessed || test) {
       pushItem(node, test, path);

@@ -136,6 +136,46 @@ test('成绩字段宽容扫描：mark/fullMark 等别名与 userScore 等价', (
   assert.equal(byId.m2.done, false); // 0 分不算完成
 });
 
+test('contentType=4 的考试条目（2026-10 新版学习页）按考试识别', () => {
+  const dto = {
+    chapters: [
+      // 真实 DTO 形态（NEU-1001638003 期末考试）：contentType=4。名字刻意避开
+      // 「测验/作业/考试/测试」字样，确保识别走的是 contentType 而非名字正则
+      { id: 'e1', name: '结课考核', contentType: 4, deadline: NOW + 2 * DAY, usedTryCount: 0 },
+      // 无 deadline 的占位节点（legacy-exam 占位形态）应被丢弃
+      { id: 'p1', name: '期末考试', contentType: 2 }
+    ]
+  };
+  const items = extractItems(dto, course);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].type, 'exam');
+  assert.equal(items[0].done, false);
+});
+
+test('parts[] 子卷兜底与本体字段的优先级', () => {
+  const dto = {
+    chapters: [
+      // 本体有 deadline 时优先生效，parts 里的过期子卷截止不改写本体
+      {
+        id: 'e3', name: '期末考试', contentType: 4,
+        deadline: NOW + DAY, parts: [{ deadline: NOW - DAY }]
+      },
+      // 本体/test 都没有时才读 parts（2026-10 新版考试的真实形态）
+      {
+        id: 'e4', name: '期末考试', contentType: 4,
+        parts: [{ deadline: NOW + 3 * HOUR, usedTryCount: 1 }, { deadline: NOW + 2 * DAY }]
+      }
+    ]
+  };
+  const items = extractItems(dto, course);
+  const byId = Object.fromEntries(items.map((i) => [i.id, i]));
+  assert.equal(byId.e3.deadlineMs, NOW + DAY);
+  assert.equal(byId.e3.done, false);
+  assert.equal(byId.e4.deadlineMs, NOW + 3 * HOUR);
+  assert.equal(byId.e4.usedTryCount, 1);
+  assert.equal(byId.e4.done, true); // 提交次数在 parts 上也能判定已完成
+});
+
 test('formatBeijing 输出北京时间 YYYY-MM-DD HH:mm', () => {
   // 2026-11-03T23:59:00+08:00 = epoch ms
   const ms = Date.UTC(2026, 10, 3, 15, 59, 0); // UTC 15:59 = 北京 23:59
