@@ -29,7 +29,7 @@ test('selectChannel 渠道选择：默认 github、大小写不敏感、未知�
   assert.equal(selectChannel('').name, 'github');
   assert.equal(selectChannel('GITHUB').name, 'github');
   assert.equal(selectChannel(' mail ').name, 'mail');
-  assert.deepEqual(availableChannels().sort(), ['github', 'mail']);
+  assert.deepEqual(availableChannels().sort(), ['cnb', 'gitee', 'github', 'gitlab', 'mail']);
   assert.equal(DEFAULT_CHANNEL, 'github');
   let errMessage = '';
   try {

@@ -223,3 +223,71 @@ test('github 渠道经工厂装配后仍走 GitHub API（全局 fetch 打桩冒�
     globalThis.fetch = originalFetch;
   }
 });
+
+test('工厂策略：只有 updateRequest（无 deleteRequest）时覆盖更新最近一条自己的评论', async () => {
+  const calls = [];
+  const channel = createIssueChannel(
+    {
+      name: 'noupdate-delete',
+      errorLabel: 'NoDelete',
+      isConfigured: () => true,
+      unconfiguredDetail: '',
+      pageSize: 10,
+      createRequest: (env, n, body) => {
+        calls.push({ method: 'POST', n, body });
+        return { url: 'https://x.test/create', options: { method: 'POST', body } };
+      },
+      listRequest: (env, n, page) => {
+        calls.push({ method: 'LIST', page });
+        return { url: `https://x.test/list?page=${page}`, options: {} };
+      },
+      updateRequest: (env, n, id, body) => {
+        calls.push({ method: 'PATCH', id, body });
+        return { url: `https://x.test/update/${id}`, options: { method: 'PATCH', body } };
+      },
+      mapComment: (raw) => raw,
+      mapCreated: () => ({ id: 'c1', url: 'https://x.test/issue/1' })
+    },
+    {
+      fetchImpl: async (url, options = {}) => {
+        if (options.method === 'PATCH') return okResponse({ id: 'c1' });
+        if (options.method === 'POST') return okResponse({ id: 'c2' });
+        return okResponse([
+          { id: 'c0', body: '别人', created_at: '2026-01-01T00:00:00Z', isBot: false },
+          { id: 'c1', body: '旧\nmoocflow 自动提醒', created_at: '2026-02-01T00:00:00Z', isBot: true }
+        ]);
+      }
+    }
+  );
+
+  const res = await channel.deliver(makeDoc(), { REMINDER_ISSUE_NUMBER: '1' }, NOW);
+  assert.equal(res.sent, true);
+  assert.equal(res.detail, '评论已更新：https://x.test/issue/1');
+  const patch = calls.find((c) => c.method === 'PATCH');
+  assert.equal(patch.id, 'c1'); // 取最近一条自己的评论，而不是别人的
+  assert.ok(!calls.some((c) => c.method === 'POST'));
+});
+
+test('工厂策略：既无 updateRequest 也无 deleteRequest 时只新建、不清理', async () => {
+  let posts = 0;
+  const channel = createIssueChannel(
+    {
+      name: 'create-only',
+      errorLabel: 'CreateOnly',
+      isConfigured: () => true,
+      unconfiguredDetail: '',
+      pageSize: 10,
+      createRequest: () => {
+        posts++;
+        return { url: 'https://x.test/create', options: { method: 'POST' } };
+      },
+      listRequest: () => ({ url: 'https://x.test/list', options: {} }),
+      mapComment: (raw) => raw,
+      mapCreated: () => ({ id: 'c1', url: 'https://x.test/issue/1' })
+    },
+    { fetchImpl: async () => okResponse({ id: 'c1' }) }
+  );
+  const res = await channel.deliver(makeDoc(), {}, NOW);
+  assert.equal(res.detail, '评论已发布：https://x.test/issue/1');
+  assert.equal(posts, 1);
+});

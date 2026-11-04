@@ -1,0 +1,93 @@
+# 阿里云云效 Flow YAML 流水线模板
+#
+# 用法：云效 → 流水线 → 新建（YAML 化编排），把本文件内容复制进编辑器，
+#       按注释替换 <> 占位符，然后在控制台配置定时触发。
+#
+# 定时触发：云效**没有 cron 表达式**，只能在控制台配置：
+#   流水线 → 触发设置 → 周期触发 / 单次触发
+#   - 周期触发：选“每天 + 时间段 + 间隔”，例如 07:54–07:59 每 5 分钟（会多跑几次，
+#     v1 未做跨次去重，请注意）；更精确的做法是建两条“单次触发”，分别设 07:54 / 17:54。
+#   - 时区以控制台为准（通常为北京时间），上线前用 5 分钟后的时间实测一次。
+#
+# 通知渠道：
+#   - 仓库在 Codeup：云效没有仓库议题，只能 NOTIFY_CHANNEL=mail（配 SMTP_*）。
+#   - 仓库在 GitHub/Gitee/GitLab：可改为 github / gitee / gitlab，并在变量组里配
+#     REPO_TOKEN + REPO_SLUG（或各平台原生变量，如 GITEE_TOKEN / GITEE_REPO_SLUG）。
+#
+# 私密变量：YAML 的 variables 不支持私密变量，MOOC_COOKIE / SMTP_PASS / REPO_TOKEN
+#   必须放在「变量组」里，并通过 variableGroups 关联。
+#
+# Node 版本：云效公共集群的 NodeBuild 步骤可用版本未在公开文档中确认，模板改用
+#   Command 步骤在运行时下载 Node 22（与 GitHub/CNB/GitLab/Gitee 保持一致）。
+#   若构建集群无法出网，请改用自定义镜像或私有构建集群。
+
+name: moocflow-reminder
+
+# 变量组 ID（控制台 → 流水线 → 变量组）；把私密变量放这里
+variableGroups: []
+
+variables:
+  - key: NOTIFY_CHANNEL
+    value: mail
+  - key: REMINDERS_FILE
+    value: reminders.json
+  - key: REMINDER_ISSUE_NUMBER
+    value: '1'
+  - key: COMMENT_RETENTION_DAYS
+    value: '7'
+  # 课程列表（非敏感）：多门用分号分隔，URL 后可跟 " # 名称"
+  - key: MOOC_COURSES
+    value: ''
+
+sources:
+  repo:
+    # 代码源类型：codeup / github / gitee / gitlab / git
+    type: codeup
+    name: moocflow
+    # Codeup 填代码库地址；GitHub/Gitee 填对应仓库 URL
+    endpoint: <代码库地址>
+    branch: main
+    # 定时运行不需要 push 触发；保持空数组即可。若控制台仍创建 push 触发，请关闭。
+    triggerEvents: []
+    # 私有仓库需要服务连接；公开仓库可删掉 certificate 段
+    certificate:
+      type: serviceConnection
+      serviceConnection: <服务连接 ID>
+
+stages:
+  remind:
+    name: 检测并发送提醒
+    jobs:
+      remind_job:
+        name: moocflow
+        runsOn: public/cn-beijing
+        steps:
+          run_moocflow:
+            step: Command
+            name: 下载 Node 22 并执行
+            with:
+              run: |
+                set -e
+                NODE_VERSION=v22.11.0
+                case "$(uname -m)" in
+                  x86_64|amd64) NODE_ARCH=x64 ;;
+                  aarch64|arm64) NODE_ARCH=arm64 ;;
+                  *) echo "不支持的架构: $(uname -m)"; exit 1 ;;
+                esac
+                TMP_DIR=$(mktemp -d)
+                TARBALL="$TMP_DIR/node.tar.gz"
+                URL1="https://npmmirror.com/mirrors/node/$NODE_VERSION/node-$NODE_VERSION-linux-$NODE_ARCH.tar.gz"
+                URL2="https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-linux-$NODE_ARCH.tar.gz"
+                if command -v curl >/dev/null 2>&1; then
+                  curl -fsSL "$URL1" -o "$TARBALL" || curl -fsSL "$URL2" -o "$TARBALL"
+                else
+                  wget -qO "$TARBALL" "$URL1" || wget -qO "$TARBALL" "$URL2"
+                fi
+                mkdir -p "$HOME/node22"
+                tar -xzf "$TARBALL" -C "$HOME/node22" --strip-components=1
+                export PATH="$HOME/node22/bin:$PATH"
+                node -v
+                npm -v
+                npm ci --registry=https://registry.npmmirror.com
+                node scripts/check.mjs
+                node scripts/notify.mjs
