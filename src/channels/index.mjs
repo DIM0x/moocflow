@@ -11,9 +11,10 @@
 import * as mail from './mail.mjs';
 import * as github from './github.mjs';
 import * as cnb from './cnb.mjs';
+import * as gitlab from './gitlab.mjs';
 import { DEFAULTS } from '../config.mjs';
 
-const CHANNELS = { mail, github, cnb };
+const CHANNELS = { mail, github, cnb, gitlab };
 
 export const DEFAULT_CHANNEL = DEFAULTS.notifyChannel;
 

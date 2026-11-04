@@ -1,0 +1,49 @@
+# 极狐 GitLab / GitLab CI 定时提醒
+#
+# 定时流水线无法写在仓库里，需要单独创建（二选一）：
+#   1. 项目页面：Build > Pipeline schedules > New schedule
+#        Cron: 54 7,17 * * *
+#        时区: Asia/Shanghai（创建后可在计划里修改）
+#        Target branch: main
+#   2. API：
+#        POST /api/v4/projects/:id/pipeline_schedules
+#        ref=main&cron=54 7,17 * * *&cron_timezone=Asia/Shanghai
+#
+# 必填 CI/CD Variables（Settings > CI/CD > Variables）：
+#   GITLAB_TOKEN 个人访问令牌（scope=api，令牌用户需为项目成员），勾选 Masked
+#   MOOC_COOKIE  完整浏览器 Cookie 串，勾选 Masked
+#   MOOC_COURSES 课程列表（非敏感，可放 Variables）
+#   SMTP_* / NOTIFY_TO（改用 mail 渠道时需要）
+#
+# 说明：
+#   - rules 只允许定时（schedule）与页面手动运行（web），push 不触发，
+#     避免每次提交消耗免费额度。
+#   - 免费版每月 400 计算分钟；本项目每天 2 次、每次约 2–3 分钟，足够。
+#   - CI_JOB_TOKEN 不能发 issue 评论（官方权限限制），必须用 GITLAB_TOKEN。
+#   - 极狐 SaaS 免费版不能用项目访问令牌（付费功能），请用个人访问令牌。
+
+stages:
+  - remind
+
+remind:
+  stage: remind
+  image: node:22
+  timeout: 10 minutes
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+  variables:
+    NOTIFY_CHANNEL: gitlab
+    REMINDERS_FILE: reminders.json
+    REMINDER_ISSUE_NUMBER: "1"
+    COMMENT_RETENTION_DAYS: "7"
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+  script:
+    - npm ci --cache .npm --prefer-offline
+    - node scripts/check.mjs
+    - node scripts/notify.mjs

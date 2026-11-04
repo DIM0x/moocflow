@@ -19,6 +19,7 @@
 | `github`（默认） | `channels/github.mjs` | 向你手动创建的提醒 issue 追加评论；你是该 issue 的参与者，GitHub 会把评论通知发到你账号的通知邮箱 | 零配置（`GITHUB_TOKEN`/`GITHUB_REPOSITORY` 由 Actions 自动提供；issue 编号非必填，默认 1） |
 | `mail` | `channels/mail.mjs` | SMTP 邮件 | `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`NOTIFY_TO` 等 |
 | `cnb` | `channels/cnb.mjs` | 向 CNB 仓库 issue 发布/更新提醒评论（**平台内留痕**；CNB 官方未说明评论会触发邮件通知，需要可靠送达用 `mail`） | `CNB_TOKEN`/`CNB_REPO_SLUG` 由 CNB 流水线自动注入，无需额外 token |
+| `gitlab` | `channels/gitlab.mjs` | 向 GitLab / 极狐 GitLab 仓库 issue 追加评论；issue 参与者会收到 "New comment" 通知（邮件/站内） | `GITLAB_TOKEN`（个人访问令牌，scope=`api`）；项目 ID/API 地址由 CI 自动提供 |
 
 **github 渠道的首次设置**（一次性，约 2 分钟）：
 
@@ -45,6 +46,19 @@
 5. **通知方式**：默认 `NOTIFY_CHANNEL: cnb`（issue 评论留痕）。若需要可靠的邮件送达，改成 `mail` 并配置 SMTP——**CNB 官方文档没有说明 issue 评论会触发站内信或邮件**。
 
 > CNB issue 评论没有删除接口，`cnb` 渠道默认（`CNB_ISSUE_UPDATE_MODE=1`）覆盖更新最近一条自己发布的提醒评论，因此 `COMMENT_RETENTION_DAYS` 对它无效；把 `CNB_ISSUE_UPDATE_MODE` 设为 `0` 则每次只发新评论、不修改旧评论（issue 会逐渐变长）。本地调试时设置的 `CNB_TOKEN` 若对应用户不是 `cnb`，需把 `CNB_BOT_LOGIN` 设为该用户名，否则识别不到历史评论、每次都会新建。
+
+### GitLab / 极狐 GitLab 接入
+
+仓库根目录的 `.gitlab-ci.yml` 只允许**定时**与**页面手动运行**触发，push 不会产生流水线：
+
+1. **导入仓库**：在 GitLab（极狐为 jihulab.com）创建项目并导入本项目，默认分支为 `main`。
+2. **建提醒 issue**：在项目里手动创建一个 issue；编号复用 `REMINDER_ISSUE_NUMBER`（非必填，默认 `1`），不是 `1` 就在 CI/CD Variables 里设置。
+3. **创建访问令牌**：极狐 SaaS 免费版**不能用项目访问令牌**（付费功能），请创建**个人访问令牌**（User Settings → Access Tokens），scope 勾选 `api`，令牌用户需是项目成员（建议 Developer）。设置过期时间并安排轮换。
+4. **配置 CI/CD Variables**（Settings → CI/CD → Variables）：`GITLAB_TOKEN`（上一步的 PAT，勾选 Masked）、`MOOC_COOKIE`（勾选 Masked）、`MOOC_COURSES` 等；改用 `mail` 时再配 `SMTP_*`/`NOTIFY_TO`。
+5. **创建定时计划**：Build → Pipeline schedules → New schedule，Cron 填 `54 7,17 * * *`，时区选 `Asia/Shanghai`，目标分支 `main`。也可用 API；仓库里的 `.gitlab-ci.yml` 无法声明定时计划。
+6. **验证**：Build → Pipelines → Run pipeline 手动跑一次。
+
+> `CI_JOB_TOKEN` **不能**发 issue 评论（官方权限清单里只有只读的 MR notes），必须用上面的 PAT。`gitlab` 渠道沿用与 github 相同的“发新评论 + 按 `COMMENT_RETENTION_DAYS` 清理旧评论”；与 GitHub 不同的是，GitLab 的删除权限只覆盖自己的 note，清理失败只记日志、不影响送达。默认只按正文签名识别历史评论；若使用独立 bot 账号的令牌，可设 `GITLAB_BOT_LOGIN` 限定作者名，更精确。
 
 ### Cookie 自动刷新（可选）
 
@@ -134,9 +148,9 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `DUE_WINDOW_HOURS` | `48` | 即将截止提醒窗口（小时） |
 | `OVERDUE_DAYS` | `3` | 已过期任务仍在提醒范围内的天数 |
 | `REMINDERS_FILE` | `reminders.json` | 两步骤间传递的提醒文档路径（两步需一致） |
-| `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail` / `cnb`；留空默认 `github` |
-| `REMINDER_ISSUE_NUMBER` | `1` | 手动创建的提醒 issue 编号（仓库 Variable，非必填；github 与 cnb 渠道共用） |
-| `COMMENT_RETENTION_DAYS` | `7` | github 渠道旧评论保留天数；`0` 表示只保留最新一条（cnb 渠道无删除接口，此项无效） |
+| `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail` / `cnb` / `gitlab`；留空默认 `github` |
+| `REMINDER_ISSUE_NUMBER` | `1` | 手动创建的提醒 issue 编号（非必填；github / cnb / gitlab 渠道共用） |
+| `COMMENT_RETENTION_DAYS` | `7` | github / gitlab 渠道旧评论保留天数；`0` 表示只保留最新一条（cnb 渠道无删除接口，此项无效） |
 | `REPO_TOKEN` / `REPO_SLUG` | 可选 | 平台无关别名（等价 `GITHUB_TOKEN` / `GITHUB_REPOSITORY`，CNB 下可代替 `CNB_TOKEN` / `CNB_REPO_SLUG`）；平台原生变量优先 |
 | `COOKIE_SECRET_STORE` | `github` | 模式 `2` 的 Secret 写回实现（预留，见 `src/secrets.mjs`）；未知取值报错 |
 | `CNB_TOKEN` | CNB 流水线自动注入 | CNB 临时令牌（`repo-notes:rw`）；本地调试时用个人访问令牌 |
@@ -145,6 +159,12 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `CNB_BOT_LOGIN` | 同 `CNB_TOKEN_USER_NAME` | 可选；本地调试时覆盖"自己"的用户名 |
 | `CNB_ISSUE_UPDATE_MODE` | `1` | CNB 渠道评论更新方式：`1` 覆盖更新最近一条自己的提醒评论（默认）；`0` 每次只发新评论、不修改旧评论（issue 会逐渐变长） |
 | `CNB_WEB_ENDPOINT` | `https://cnb.cool` | 可选；仅用于拼接提醒评论的展示链接 |
+| `GITLAB_TOKEN` | gitlab 渠道必填 | 个人访问令牌，scope=`api`（`CI_JOB_TOKEN` 不可用）；本地调试可用 `REPO_TOKEN` 代替 |
+| `CI_PROJECT_ID` / `CI_API_V4_URL` / `CI_PROJECT_URL` | GitLab CI 自动注入 | 项目 ID、API 地址（如 `https://jihulab.com/api/v4`）、项目页面地址 |
+| `GITLAB_PROJECT` | 同 `CI_PROJECT_ID` | 可选；本地调试时指定项目 ID 或 `group/project` 路径 |
+| `GITLAB_API_URL` | 同 `CI_API_V4_URL` | 可选；本地调试时指定 API 地址（极狐为 `https://jihulab.com/api/v4`） |
+| `GITLAB_PROJECT_URL` | 同 `CI_PROJECT_URL` | 可选；本地调试时用于拼接 issue 展示链接 |
+| `GITLAB_BOT_LOGIN` | 不设置 | 可选；限定"自己"的评论作者名。不设置时只按正文签名识别 |
 | `SMTP_HOST` | mail 渠道必填 | SMTP 服务器 |
 | `SMTP_PORT` | `465` | SMTP 端口 |
 | `SMTP_SECURE` | 端口为 `465` 时 `true` | 是否使用 TLS；留空按端口推断 |
@@ -160,5 +180,6 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 - SPOC 课程会额外读取公开课程介绍页来定位关联的源课程；如果平台页面改版导致解析失败，日志会给出警告并退化为只抓路由 term
 - 测验的「已用尽尝试次数」或「得分>0」才视为完成；剩余尝试次数且未得分的测验会继续提醒（防止漏刷题）
 - `cnb` 渠道只在平台内留痕：CNB 官方未说明 issue 评论会触发站内信/邮件，需要可靠送达请用 `mail`
+- `gitlab` 渠道依赖个人访问令牌（极狐 SaaS 免费版不支持项目访问令牌），令牌默认最长 365 天，需安排轮换；CI_JOB_TOKEN 无写评论权限
 - github 渠道的通知邮件由 GitHub 派发，到达时间不可控；追求即时/可靠送达用 `mail` 渠道
 - 低活跃仓库的定时 workflow 可能被 GitHub 静默跳过（不排队、无运行记录）；若 Actions 页长期没有定时运行痕迹，先手动 Run workflow 验证配置本身无误

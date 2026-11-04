@@ -22,7 +22,7 @@
  *   createRequest(env, issueNumber, body) -> { url, options }   发布评论的 fetch 参数
  *   listRequest(env, issueNumber, page)   -> { url, options }   按页列出评论
  *   updateRequest(env, issueNumber, commentId, body) -> { url, options }  可选；覆盖更新评论
- *   deleteRequest(env, commentId)         -> { url, options }   可选；删除单条评论
+ *   deleteRequest(env, commentId, issueNumber) -> { url, options }   可选；删除单条评论
  *   pageSize              列表分页大小（"不足一页即到底"的判断依据）
  *   mapComment(raw, env)  平台原始评论 -> 归一化评论 { id, body, created_at, isBot, url? }
  *   mapCreated(raw, env, issueNumber)   发布/更新响应 -> { id, url }
@@ -141,8 +141,8 @@ export function createIssueChannel(description, { fetchImpl } = {}) {
     return collected;
   }
 
-  async function deleteComment(env, id) {
-    const { url, options } = description.deleteRequest(env, id);
+  async function deleteComment(env, issueNumber, id) {
+    const { url, options } = description.deleteRequest(env, id, issueNumber);
     const res = await doFetch(url, options);
     // 404 = 已经不存在，视作删除成功
     if (!res.ok && res.status !== 404) {
@@ -157,7 +157,7 @@ export function createIssueChannel(description, { fetchImpl } = {}) {
     let failed = 0;
     for (const c of expired) {
       try {
-        await deleteComment(env, c.id);
+        await deleteComment(env, issueNumber, c.id);
         removed++;
       } catch (e) {
         failed++;
