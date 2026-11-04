@@ -78,6 +78,21 @@
 
 > Gitee 的通知矩阵里「任务被评论」站内信默认开启，但**邮件默认关闭**，每个收件人都要自己去通知设置里勾选；API 创建的评论是否触发通知官方未文档化。需要可靠送达时，建议同时配置仓库 WebHook 的「评论」钩子到钉钉/飞书群机器人，或直接用 `mail` 渠道。`gitee` 渠道的评论清理语义与 github 相同（`COMMENT_RETENTION_DAYS` 生效）。
 
+### 阿里云云效 Flow 接入
+
+模板在 `ci/yunxiao-flow.yml`（云效没有仓库内自动识别的 CI 文件约定，需要复制到 Flow 的 YAML 编辑器）：
+
+1. **新建流水线**：云效 → 流水线 → 新建 → YAML 化编排，粘贴模板。
+2. **选代码源**：`sources.repo.type` 支持 `codeup` / `github` / `gitee` / `gitlab` / `git`。私有仓库要配服务连接。
+3. **配私密变量**：云效 YAML 的 `variables` **不支持私密变量**，`MOOC_COOKIE`、`SMTP_PASS`（以及 GitHub/Gitee 渠道的 `REPO_TOKEN`）必须放进**变量组**，再把变量组 ID 填到 `variableGroups`。
+4. **选通知渠道**：
+   - 仓库在 **Codeup**：云效没有仓库议题，`NOTIFY_CHANNEL` 只能是 `mail`（配 `SMTP_*` / `NOTIFY_TO`）。
+   - 仓库在 **GitHub / Gitee / GitLab**：可改成 `github` / `gitee` / `gitlab`，并在变量组里配 `REPO_TOKEN` + `REPO_SLUG`（或平台原生变量）。
+5. **配定时**：云效**没有 cron 表达式**，只能在控制台「触发设置 → 周期触发 / 单次触发」里配。想要准确的每天两次，建议建两条单次触发（07:54 / 17:54）；周期触发是“时间段 + 间隔”模型，会多跑。上线前用 5 分钟后的时间实测时区。
+6. **验证**：手动运行一次。
+
+> 云效免费版 3000 核分/月、并发 3，每天两次几分钟的小任务占用约 20%。模板用 `Command` 步骤在运行时下载 Node 22（公共集群的 NodeBuild 版本未在公开文档中确认）；若公共集群不能出网，需改用自定义镜像或私有构建集群。Flow 自带的消息通知插件（钉钉/邮件/企微/飞书/Webhook）只报流水线状态，**不能写议题评论**。
+
 ### Cookie 自动刷新（可选）
 
 `COOKIE_REFRESH_MODE` 控制检测到 Cookie 失效时的行为：
@@ -169,7 +184,7 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail` / `cnb` / `gitlab` / `gitee`；留空默认 `github` |
 | `REMINDER_ISSUE_NUMBER` | `1` | 手动创建的提醒 issue 编号（非必填；github / cnb / gitlab / gitee 渠道共用） |
 | `COMMENT_RETENTION_DAYS` | `7` | github / gitlab / gitee 渠道旧评论保留天数；`0` 表示只保留最新一条（cnb 渠道无删除接口，此项无效） |
-| `REPO_TOKEN` / `REPO_SLUG` | 可选 | 平台无关别名（等价 `GITHUB_TOKEN` / `GITHUB_REPOSITORY`，CNB 下可代替 `CNB_TOKEN` / `CNB_REPO_SLUG`）；平台原生变量优先 |
+| `REPO_TOKEN` / `REPO_SLUG` | 可选 | 平台无关别名（等价 `GITHUB_TOKEN` / `GITHUB_REPOSITORY`，CNB 下可代替 `CNB_TOKEN` / `CNB_REPO_SLUG`，云效 + GitHub/Gitee 仓库时也用它）；平台原生变量优先 |
 | `COOKIE_SECRET_STORE` | `github` | 模式 `2` 的 Secret 写回实现（预留，见 `src/secrets.mjs`）；未知取值报错 |
 | `CNB_TOKEN` | CNB 流水线自动注入 | CNB 临时令牌（`repo-notes:rw`）；本地调试时用个人访问令牌 |
 | `CNB_REPO_SLUG` / `CNB_API_ENDPOINT` | CNB 流水线自动注入 | 仓库路径（`group/repo`）与 API 地址；本地调试时手动设置 |
@@ -204,5 +219,6 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 - `cnb` 渠道只在平台内留痕：CNB 官方未说明 issue 评论会触发站内信/邮件，需要可靠送达请用 `mail`
 - `gitlab` 渠道依赖个人访问令牌（极狐 SaaS 免费版不支持项目访问令牌），令牌默认最长 365 天，需安排轮换；CI_JOB_TOKEN 无写评论权限
 - `gitee` 渠道的令牌在 Gitee Go 中没有密文变量可放，只能明文保存，**因此必须使用私有仓库**；且 build@nodejs 最高只支持 Node 15，workflow 需在运行时下载 Node 22，构建环境必须能出网
+- 云效 Codeup 仓库没有议题对象，**没有对应的 issue 渠道**；Codeup 用户只能使用 `mail`。仓库在 GitHub/Gitee、仅把 CI 放云效时，现有 `github`/`gitee` 渠道仍可用
 - github 渠道的通知邮件由 GitHub 派发，到达时间不可控；追求即时/可靠送达用 `mail` 渠道
 - 低活跃仓库的定时 workflow 可能被 GitHub 静默跳过（不排队、无运行记录）；若 Actions 页长期没有定时运行痕迹，先手动 Run workflow 验证配置本身无误
