@@ -15,7 +15,8 @@ export const DEFAULTS = Object.freeze({
   notifyChannel: 'github',
   smtpPort: 465,
   commentRetentionDays: 7,
-  reminderIssueNumber: 1
+  reminderIssueNumber: 1,
+  cnbIssueUpdateMode: 1
 });
 
 function readString(env, name, fallback) {
@@ -50,6 +51,17 @@ function readRefreshMode(env) {
   const value = Number(raw);
   if (![0, 1, 2].includes(value)) {
     throw new Error(`COOKIE_REFRESH_MODE 只能是 0/1/2（当前：${raw}）`);
+  }
+  return value;
+}
+
+/** 读取 0/1 开关；留空回退默认值，其余非法值报错。 */
+function readBinaryMode(env, name, fallback) {
+  const raw = env[name];
+  if (raw == null || String(raw).trim() === '') return fallback;
+  const value = Number(raw);
+  if (![0, 1].includes(value)) {
+    throw new Error(`${name} 只能是 0/1（当前：${raw}）`);
   }
   return value;
 }
@@ -92,3 +104,16 @@ export function resolveIssueConfig(env = process.env) {
 
 /** 旧名称，向后兼容。 */
 export const resolveGithubConfig = resolveIssueConfig;
+
+/**
+ * CNB 渠道专属配置。
+ *
+ * issueUpdateMode 控制 issue 评论的更新方式（CNB 没有删除评论的接口）：
+ *   0 = 每次只发新评论，不修改旧评论（issue 会逐渐变长）
+ *   1 = 覆盖更新最近一条自己发布的提醒评论（默认，保持 issue 干净）
+ */
+export function resolveCnbConfig(env = process.env) {
+  return {
+    issueUpdateMode: readBinaryMode(env, 'CNB_ISSUE_UPDATE_MODE', DEFAULTS.cnbIssueUpdateMode)
+  };
+}

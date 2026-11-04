@@ -1,0 +1,62 @@
+# CNB（cnb.cool）定时提醒流水线
+#
+# 使用前提（详见 README.agent.md「CNB 接入」）：
+#   1. 在仓库里手动创建一个 issue（编号默认 1；不是 1 就改下面的 REMINDER_ISSUE_NUMBER）
+#   2. 敏感配置（MOOC_COOKIE、SMTP_* 等）推荐放进 CNB 的「密钥仓库」，
+#      再用 imports 引入（CNB 官方做法，密钥仓库不能 clone 到本地）：
+#        imports:
+#          - https://cnb.cool/<密钥仓库路径>/-/blob/main/moocflow.yml
+#      密钥文件内容是一组键值对，如：
+#        MOOC_COOKIE: "完整 Cookie 串"
+#        SMTP_HOST: smtp.qq.com
+#        ...（需要哪些键见 README.agent.md 环境变量表）
+#   3. 推送本文件后，到仓库「云原生构建 → 定时任务」确认同步成功
+#
+# 说明：
+#   - 本文件只配置 crontab 触发，不配置 push，避免每次提交都消耗构建额度；
+#     需要手动验证时，在 CNB 页面上手动运行该流水线即可。
+#   - CNB 定时任务固定使用 Asia/Shanghai，cron 直接写北京时间。
+#   - 分支名必须是明确的单一分支（不支持通配）；默认分支不是 main 时请改键名。
+
+main:
+  # 每天北京时间 07:54 / 17:54，避开整点
+  "crontab: 54 7,17 * * *":
+    - name: mooc deadline reminder
+      docker:
+        image: node:22
+
+      # 推荐：从密钥仓库注入敏感配置。不用密钥仓库时删掉这段，改用下面的注释项。
+      # imports:
+      #   - https://cnb.cool/<密钥仓库路径>/-/blob/main/moocflow.yml
+
+      env:
+        # 通知渠道：cnb = 向 issue 追加/更新评论（平台内留痕，不保证邮件送达）
+        # 需要可靠送达请改成 mail，并配置 SMTP_*（见 README.agent.md）
+        NOTIFY_CHANNEL: cnb
+        REMINDERS_FILE: reminders.json
+        REMINDER_ISSUE_NUMBER: "1"
+        # 评论更新方式：1 = 覆盖更新同一条提醒评论（默认）；0 = 每次只发新评论
+        CNB_ISSUE_UPDATE_MODE: "1"
+
+        # 课程列表（非敏感）：多门课程用分号分隔，URL 后可跟 " # 名称"
+        MOOC_COURSES: ""
+
+        # 不使用密钥仓库时，可直接在这里填写；注意这些值会进入仓库历史
+        # MOOC_COOKIE: ""
+        # SMTP_HOST: ""
+        # SMTP_PORT: "465"
+        # SMTP_SECURE: "true"
+        # SMTP_USER: ""
+        # SMTP_PASS: ""
+        # SMTP_FROM: ""
+        # NOTIFY_TO: ""
+
+      stages:
+        - name: Install dependencies
+          script: npm ci
+        - name: Detect due items
+          script: node scripts/check.mjs
+        - name: Send notification
+          script: node scripts/notify.mjs
+
+      timeout: 10m

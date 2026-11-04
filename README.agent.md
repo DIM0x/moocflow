@@ -18,6 +18,7 @@
 |---|---|---|---|
 | `github`（默认） | `channels/github.mjs` | 向你手动创建的提醒 issue 追加评论；你是该 issue 的参与者，GitHub 会把评论通知发到你账号的通知邮箱 | 零配置（`GITHUB_TOKEN`/`GITHUB_REPOSITORY` 由 Actions 自动提供；issue 编号非必填，默认 1） |
 | `mail` | `channels/mail.mjs` | SMTP 邮件 | `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`NOTIFY_TO` 等 |
+| `cnb` | `channels/cnb.mjs` | 向 CNB 仓库 issue 发布/更新提醒评论（**平台内留痕**；CNB 官方未说明评论会触发邮件通知，需要可靠送达用 `mail`） | `CNB_TOKEN`/`CNB_REPO_SLUG` 由 CNB 流水线自动注入，无需额外 token |
 
 **github 渠道的首次设置**（一次性，约 2 分钟）：
 
@@ -31,7 +32,19 @@
 
 **新增渠道**（钉钉/Telegram/PushPlus 等）：在 `src/channels/` 新建 `<名字>.mjs`，实现统一契约（`name` / `isConfigured` / `deliver` / `renderPreview`，见 `mail.mjs` 头注释），在 `channels/index.mjs` 注册一行即可，检测逻辑与其他渠道零改动。
 
-**新增代码托管平台的 issue 通知渠道**（Gitea/GitLab/Gitee 等）：平台的 issue 评论 API 差异（路径、鉴权头、bot 识别、字段映射）收敛为 `src/channels/issue-factory.mjs` 的平台描述对象，发布、翻页清理、渲染（`src/channels/render.mjs`）等通用流程零改动，参考 `github.mjs` 写一个描述对象并注册即可。各平台渠道彼此并列、由用户用 `NOTIFY_CHANNEL` 显式选择，不做平台自动探测。仓库坐标与令牌的环境变量解析在 `src/repo-env.mjs`（平台原生变量优先，通用别名 `REPO_SLUG`/`REPO_TOKEN` 兜底）；Cookie 写回 Secret 的平台实现在 `src/secrets.mjs`（`COOKIE_REFRESH_MODE=2` 用，当前仅 GitHub）。
+**新增代码托管平台的 issue 通知渠道**（Gitea/GitLab/Gitee 等）：平台的 issue 评论 API 差异（路径、鉴权头、bot 识别、字段映射）收敛为 `src/channels/issue-factory.mjs` 的平台描述对象，发布、翻页清理、渲染（`src/channels/render.mjs`）等通用流程零改动，参考 `github.mjs` / `cnb.mjs` 写一个描述对象并注册即可。工厂按平台能力自动选择策略：有 `updateRequest`（CNB 无删除接口）就覆盖更新同一条评论；有 `deleteRequest`（GitHub）就新建并按保留期清理；两者都没有就每次新建。各平台渠道彼此并列、由用户用 `NOTIFY_CHANNEL` 显式选择，不做平台自动探测。仓库坐标与令牌的环境变量解析在 `src/repo-env.mjs`（平台原生变量优先，通用别名 `REPO_SLUG`/`REPO_TOKEN` 兜底）；Cookie 写回 Secret 的平台实现在 `src/secrets.mjs`（`COOKIE_REFRESH_MODE=2` 用，当前仅 GitHub）。
+
+### CNB 接入（cnb.cool）
+
+仓库根目录的 `.cnb.yml` 已配置好定时流水线（仅 crontab 触发，不随 push 运行）：
+
+1. **导入仓库**：在 CNB 创建仓库并导入本项目（CNB 读取的是 `main` 分支的 `.cnb.yml`；默认分支不同请改文件里的分支键）。
+2. **建提醒 issue**：在 CNB 仓库里手动创建一个 issue；编号复用 `REMINDER_ISSUE_NUMBER`（非必填，默认 `1`），不是 `1` 时改 `.cnb.yml` 的 `env`。
+3. **配置敏感信息**：CNB 没有 GitHub Secrets 那种仓库级密钥，官方做法是建一个「密钥仓库」（类型选密钥仓库，只能网页编辑），把 `MOOC_COOKIE`、`SMTP_*` 等写成键值对文件，然后取消 `.cnb.yml` 里 `imports:` 的注释并填入该文件 URL。非敏感项（如 `MOOC_COURSES`）直接写在 `env:` 里。
+4. **确认定时任务**：推送后到仓库「云原生构建 → 定时任务」确认同步成功（cron 为 `54 7,17 * * *`，CNB 固定使用北京时间，无需换算 UTC）。
+5. **通知方式**：默认 `NOTIFY_CHANNEL: cnb`（issue 评论留痕）。若需要可靠的邮件送达，改成 `mail` 并配置 SMTP——**CNB 官方文档没有说明 issue 评论会触发站内信或邮件**。
+
+> CNB issue 评论没有删除接口，`cnb` 渠道默认（`CNB_ISSUE_UPDATE_MODE=1`）覆盖更新最近一条自己发布的提醒评论，因此 `COMMENT_RETENTION_DAYS` 对它无效；把 `CNB_ISSUE_UPDATE_MODE` 设为 `0` 则每次只发新评论、不修改旧评论（issue 会逐渐变长）。本地调试时设置的 `CNB_TOKEN` 若对应用户不是 `cnb`，需把 `CNB_BOT_LOGIN` 设为该用户名，否则识别不到历史评论、每次都会新建。
 
 ### Cookie 自动刷新（可选）
 
@@ -121,11 +134,17 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `DUE_WINDOW_HOURS` | `48` | 即将截止提醒窗口（小时） |
 | `OVERDUE_DAYS` | `3` | 已过期任务仍在提醒范围内的天数 |
 | `REMINDERS_FILE` | `reminders.json` | 两步骤间传递的提醒文档路径（两步需一致） |
-| `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail`；留空默认 `github` |
-| `REMINDER_ISSUE_NUMBER` | `1` | 手动创建的提醒 issue 编号（仓库 Variable，非必填） |
-| `COMMENT_RETENTION_DAYS` | `7` | github 渠道旧评论保留天数；`0` 表示只保留最新一条 |
-| `REPO_TOKEN` / `REPO_SLUG` | 可选 | github 渠道的平台无关别名（等价 `GITHUB_TOKEN` / `GITHUB_REPOSITORY`）；平台原生变量优先。供非 Actions 环境/其他托管平台复用同一套配置名 |
+| `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail` / `cnb`；留空默认 `github` |
+| `REMINDER_ISSUE_NUMBER` | `1` | 手动创建的提醒 issue 编号（仓库 Variable，非必填；github 与 cnb 渠道共用） |
+| `COMMENT_RETENTION_DAYS` | `7` | github 渠道旧评论保留天数；`0` 表示只保留最新一条（cnb 渠道无删除接口，此项无效） |
+| `REPO_TOKEN` / `REPO_SLUG` | 可选 | 平台无关别名（等价 `GITHUB_TOKEN` / `GITHUB_REPOSITORY`，CNB 下可代替 `CNB_TOKEN` / `CNB_REPO_SLUG`）；平台原生变量优先 |
 | `COOKIE_SECRET_STORE` | `github` | 模式 `2` 的 Secret 写回实现（预留，见 `src/secrets.mjs`）；未知取值报错 |
+| `CNB_TOKEN` | CNB 流水线自动注入 | CNB 临时令牌（`repo-notes:rw`）；本地调试时用个人访问令牌 |
+| `CNB_REPO_SLUG` / `CNB_API_ENDPOINT` | CNB 流水线自动注入 | 仓库路径（`group/repo`）与 API 地址；本地调试时手动设置 |
+| `CNB_TOKEN_USER_NAME` | CNB 流水线自动注入 | 令牌用户名（固定 `cnb`），用于识别自己发布的评论 |
+| `CNB_BOT_LOGIN` | 同 `CNB_TOKEN_USER_NAME` | 可选；本地调试时覆盖"自己"的用户名 |
+| `CNB_ISSUE_UPDATE_MODE` | `1` | CNB 渠道评论更新方式：`1` 覆盖更新最近一条自己的提醒评论（默认）；`0` 每次只发新评论、不修改旧评论（issue 会逐渐变长） |
+| `CNB_WEB_ENDPOINT` | `https://cnb.cool` | 可选；仅用于拼接提醒评论的展示链接 |
 | `SMTP_HOST` | mail 渠道必填 | SMTP 服务器 |
 | `SMTP_PORT` | `465` | SMTP 端口 |
 | `SMTP_SECURE` | 端口为 `465` 时 `true` | 是否使用 TLS；留空按端口推断 |
@@ -140,5 +159,6 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 - 未做跨次运行的去重（v1 每次运行窗口内的任务都会再提醒一次），提醒频率 = 运行频率
 - SPOC 课程会额外读取公开课程介绍页来定位关联的源课程；如果平台页面改版导致解析失败，日志会给出警告并退化为只抓路由 term
 - 测验的「已用尽尝试次数」或「得分>0」才视为完成；剩余尝试次数且未得分的测验会继续提醒（防止漏刷题）
+- `cnb` 渠道只在平台内留痕：CNB 官方未说明 issue 评论会触发站内信/邮件，需要可靠送达请用 `mail`
 - github 渠道的通知邮件由 GitHub 派发，到达时间不可控；追求即时/可靠送达用 `mail` 渠道
 - 低活跃仓库的定时 workflow 可能被 GitHub 静默跳过（不排队、无运行记录）；若 Actions 页长期没有定时运行痕迹，先手动 Run workflow 验证配置本身无误

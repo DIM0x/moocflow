@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULTS, resolveDetectionConfig, resolveGithubConfig, resolveNotifyConfig } from '../src/config.mjs';
+import { DEFAULTS, resolveCnbConfig, resolveDetectionConfig, resolveGithubConfig, resolveNotifyConfig } from '../src/config.mjs';
 
 const expectedDefaults = {
   windowHours: 48,
@@ -95,4 +95,14 @@ test('DEFAULTS 不可变且包含预期默认值', () => {
   assert.equal(DEFAULTS.smtpPort, 465);
   assert.equal(DEFAULTS.commentRetentionDays, 7);
   assert.equal(DEFAULTS.reminderIssueNumber, 1);
+  assert.equal(DEFAULTS.cnbIssueUpdateMode, 1);
+});
+
+test('resolveCnbConfig 评论更新方式：默认 1、支持 0/1、非法报错', () => {
+  assert.equal(resolveCnbConfig({}).issueUpdateMode, 1);
+  assert.equal(resolveCnbConfig({ CNB_ISSUE_UPDATE_MODE: '   ' }).issueUpdateMode, 1);
+  assert.equal(resolveCnbConfig({ CNB_ISSUE_UPDATE_MODE: '0' }).issueUpdateMode, 0);
+  assert.equal(resolveCnbConfig({ CNB_ISSUE_UPDATE_MODE: ' 1 ' }).issueUpdateMode, 1);
+  assert.throws(() => resolveCnbConfig({ CNB_ISSUE_UPDATE_MODE: '2' }), /CNB_ISSUE_UPDATE_MODE/);
+  assert.throws(() => resolveCnbConfig({ CNB_ISSUE_UPDATE_MODE: 'abc' }), /CNB_ISSUE_UPDATE_MODE/);
 });
