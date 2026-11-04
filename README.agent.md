@@ -20,6 +20,7 @@
 | `mail` | `channels/mail.mjs` | SMTP 邮件 | `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`NOTIFY_TO` 等 |
 | `cnb` | `channels/cnb.mjs` | 向 CNB 仓库 issue 发布/更新提醒评论（**平台内留痕**；CNB 官方未说明评论会触发邮件通知，需要可靠送达用 `mail`） | `CNB_TOKEN`/`CNB_REPO_SLUG` 由 CNB 流水线自动注入，无需额外 token |
 | `gitlab` | `channels/gitlab.mjs` | 向 GitLab / 极狐 GitLab 仓库 issue 追加评论；issue 参与者会收到 "New comment" 通知（邮件/站内） | `GITLAB_TOKEN`（个人访问令牌，scope=`api`）；项目 ID/API 地址由 CI 自动提供 |
+| `gitee` | `channels/gitee.mjs` | 向 Gitee 仓库 issue 追加评论（评论会触发站内信；**邮件默认关闭，需收件人自行开启**） | `GITEE_TOKEN`（个人访问令牌）+ `GITEE_REPO_SLUG`（`owner/repo`） |
 
 **github 渠道的首次设置**（一次性，约 2 分钟）：
 
@@ -59,6 +60,23 @@
 6. **验证**：Build → Pipelines → Run pipeline 手动跑一次。
 
 > `CI_JOB_TOKEN` **不能**发 issue 评论（官方权限清单里只有只读的 MR notes），必须用上面的 PAT。`gitlab` 渠道沿用与 github 相同的“发新评论 + 按 `COMMENT_RETENTION_DAYS` 清理旧评论”；与 GitHub 不同的是，GitLab 的删除权限只覆盖自己的 note，清理失败只记日志、不影响送达。默认只按正文签名识别历史评论；若使用独立 bot 账号的令牌，可设 `GITLAB_BOT_LOGIN` 限定作者名，更精确。
+
+### Gitee Go 接入
+
+> ⚠️ **必须使用私有仓库（private）**：Gitee Go 没有密文变量，`GITEE_TOKEN`、`MOOC_COOKIE`、`SMTP_*` 都会以明文写进 `.workflow/*.yml`；公开仓库等于公开凭据。
+
+仓库根目录的 `.workflow/moocflow-reminder.yml` 是 Gitee Go 的流水线定义（自有 DSL，与 GitHub Actions 不兼容）：
+
+1. **导入仓库**：在 Gitee 创建仓库并导入本项目。Gitee Go 读取 `.workflow/*.yml`；如果页面没有自动识别，请在「流水线」里新建并选择该 YAML。
+2. **建提醒 issue**：在仓库里手动创建一个 issue；编号复用 `REMINDER_ISSUE_NUMBER`（非必填，默认 `1`）。
+3. **创建访问令牌**：设置 → 安全设置 → 私人令牌，scope 至少勾选 `issues` + `notes`（Gitee 未逐接口标注 scope，需实测）。**Gitee Go 没有密文变量**，令牌只能明文写进 `.workflow` 的 `variables`——务必使用**私有仓库**、专用、最小权限、可轮换的令牌。
+4. **补全变量**：`GITEE_REPO_SLUG`（`owner/repo`，必须显式填，Gitee Go 的 `GITEE_REPO` 不含 owner）、`MOOC_COURSES`、`MOOC_COOKIE`，改用 `mail` 时再配 `SMTP_*`/`NOTIFY_TO`。
+5. **确认定时**：一条流水线只支持一个 cron 表达式，文件里用 `54 7,17 * * ?` 覆盖每天两次。**时区官方未注明**，上线前用“5 分钟后”的表达式实测一次；若实际按 UTC 触发，改成 `54 23,9 * * ?`。
+6. **验证**：在流水线页面手动运行一次。
+
+> **Node 版本限制**：Gitee Go 的 `build@nodejs` 官方只支持到 Node 15.12.0，而本项目需要 Node 20+（依赖全局 `fetch`）。workflow 里因此**在构建时下载 Node 22**（与 GitHub/CNB/GitLab 的版本保持一致，优先 npmmirror）再运行，属实验性做法；如果构建环境无法出网下载，请改用自有主机组（`shell@agent`）或 `mail` 渠道配合其他 CI。社区还反馈“纯定时流水线可能无法保存，需同时勾选 Push 事件并推送一次”，遇到时按提示处理即可。
+
+> Gitee 的通知矩阵里「任务被评论」站内信默认开启，但**邮件默认关闭**，每个收件人都要自己去通知设置里勾选；API 创建的评论是否触发通知官方未文档化。需要可靠送达时，建议同时配置仓库 WebHook 的「评论」钩子到钉钉/飞书群机器人，或直接用 `mail` 渠道。`gitee` 渠道的评论清理语义与 github 相同（`COMMENT_RETENTION_DAYS` 生效）。
 
 ### Cookie 自动刷新（可选）
 
@@ -148,9 +166,9 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `DUE_WINDOW_HOURS` | `48` | 即将截止提醒窗口（小时） |
 | `OVERDUE_DAYS` | `3` | 已过期任务仍在提醒范围内的天数 |
 | `REMINDERS_FILE` | `reminders.json` | 两步骤间传递的提醒文档路径（两步需一致） |
-| `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail` / `cnb` / `gitlab`；留空默认 `github` |
-| `REMINDER_ISSUE_NUMBER` | `1` | 手动创建的提醒 issue 编号（非必填；github / cnb / gitlab 渠道共用） |
-| `COMMENT_RETENTION_DAYS` | `7` | github / gitlab 渠道旧评论保留天数；`0` 表示只保留最新一条（cnb 渠道无删除接口，此项无效） |
+| `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail` / `cnb` / `gitlab` / `gitee`；留空默认 `github` |
+| `REMINDER_ISSUE_NUMBER` | `1` | 手动创建的提醒 issue 编号（非必填；github / cnb / gitlab / gitee 渠道共用） |
+| `COMMENT_RETENTION_DAYS` | `7` | github / gitlab / gitee 渠道旧评论保留天数；`0` 表示只保留最新一条（cnb 渠道无删除接口，此项无效） |
 | `REPO_TOKEN` / `REPO_SLUG` | 可选 | 平台无关别名（等价 `GITHUB_TOKEN` / `GITHUB_REPOSITORY`，CNB 下可代替 `CNB_TOKEN` / `CNB_REPO_SLUG`）；平台原生变量优先 |
 | `COOKIE_SECRET_STORE` | `github` | 模式 `2` 的 Secret 写回实现（预留，见 `src/secrets.mjs`）；未知取值报错 |
 | `CNB_TOKEN` | CNB 流水线自动注入 | CNB 临时令牌（`repo-notes:rw`）；本地调试时用个人访问令牌 |
@@ -165,6 +183,10 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `GITLAB_API_URL` | 同 `CI_API_V4_URL` | 可选；本地调试时指定 API 地址（极狐为 `https://jihulab.com/api/v4`） |
 | `GITLAB_PROJECT_URL` | 同 `CI_PROJECT_URL` | 可选；本地调试时用于拼接 issue 展示链接 |
 | `GITLAB_BOT_LOGIN` | 不设置 | 可选；限定"自己"的评论作者名。不设置时只按正文签名识别 |
+| `GITEE_TOKEN` | gitee 渠道必填 | 个人访问令牌，scope 建议 `issues` + `notes`；本地调试可用 `REPO_TOKEN` 代替 |
+| `GITEE_REPO_SLUG` | gitee 渠道必填 | 仓库路径 `owner/repo`（Gitee Go 的 `GITEE_REPO` 不含 owner）；也可用含 `/` 的 `GITEE_REPO` 或 `REPO_SLUG` |
+| `GITEE_API_URL` / `GITEE_WEB_URL` | `https://gitee.com/api/v5` / `https://gitee.com` | 可选；私有化或镜像实例时覆盖 |
+| `GITEE_BOT_LOGIN` | 不设置 | 可选；限定"自己"的评论作者名。不设置时只按正文签名识别 |
 | `SMTP_HOST` | mail 渠道必填 | SMTP 服务器 |
 | `SMTP_PORT` | `465` | SMTP 端口 |
 | `SMTP_SECURE` | 端口为 `465` 时 `true` | 是否使用 TLS；留空按端口推断 |
@@ -181,5 +203,6 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 - 测验的「已用尽尝试次数」或「得分>0」才视为完成；剩余尝试次数且未得分的测验会继续提醒（防止漏刷题）
 - `cnb` 渠道只在平台内留痕：CNB 官方未说明 issue 评论会触发站内信/邮件，需要可靠送达请用 `mail`
 - `gitlab` 渠道依赖个人访问令牌（极狐 SaaS 免费版不支持项目访问令牌），令牌默认最长 365 天，需安排轮换；CI_JOB_TOKEN 无写评论权限
+- `gitee` 渠道的令牌在 Gitee Go 中没有密文变量可放，只能明文保存，**因此必须使用私有仓库**；且 build@nodejs 最高只支持 Node 15，workflow 需在运行时下载 Node 22，构建环境必须能出网
 - github 渠道的通知邮件由 GitHub 派发，到达时间不可控；追求即时/可靠送达用 `mail` 渠道
 - 低活跃仓库的定时 workflow 可能被 GitHub 静默跳过（不排队、无运行记录）；若 Actions 页长期没有定时运行痕迹，先手动 Run workflow 验证配置本身无误

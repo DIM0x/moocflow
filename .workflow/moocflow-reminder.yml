@@ -1,0 +1,93 @@
+# Gitee Go 定时提醒流水线
+#
+# ⚠️ 必须使用**私有仓库**（private）：Gitee Go 没有密文变量，下面的
+#    GITEE_TOKEN / MOOC_COOKIE / SMTP_* 都会以明文提交进本文件；公开仓库等于泄露凭据。
+#
+# ⚠️ 重要限制：Gitee Go 的 build@nodejs 官方只支持到 Node 15.12.0，而本项目需要
+#    Node 20+（依赖全局 fetch）。因此下面的命令会**自行下载 Node 22** 再运行
+#    （与 GitHub/CNB/GitLab 的 node:22 保持一致），属实验性做法；
+#    如果构建环境无法访问下载源，请改用自有主机组（shell@agent）。
+#
+# 使用前提（详见 README.agent.md「Gitee Go 接入」）：
+#   1. 在 Gitee 仓库里手动创建一个 issue（编号默认 1，复用 REMINDER_ISSUE_NUMBER）
+#   2. 创建个人访问令牌（scope 建议 issues + notes），填到下面的 GITEE_TOKEN
+#      ⚠️ Gitee Go 没有密文变量，令牌只能明文保存，务必用专用令牌并定期轮换
+#   3. 把 GITEE_REPO_SLUG / MOOC_COURSES / SMTP_* 等变量补全
+#   4. 推送后到「流水线」页面确认定时触发已生效
+#
+# 定时说明：
+#   - 一条流水线只支持一个 cron 表达式；这里用列表写法覆盖每天两次。
+#   - 时区官方未注明（只提过“周日是 1”），上线前请用 5 分钟后的时间实测；
+#     若实际按 UTC 触发，把 cron 改成 '54 23,9 * * ?'。
+
+version: '1.0'
+name: moocflow-reminder
+displayName: MOOC 截止提醒
+
+triggers:
+  schedule:
+    - cron: '54 7,17 * * ?'
+
+variables:
+  NOTIFY_CHANNEL: gitee
+  REMINDERS_FILE: reminders.json
+  REMINDER_ISSUE_NUMBER: '1'
+  COMMENT_RETENTION_DAYS: '7'
+
+  # 仓库路径 owner/repo（Gitee Go 的 GITEE_REPO 不含 owner，需显式填写）
+  GITEE_REPO_SLUG: ''
+
+  # 个人访问令牌；明文保存 —— 仅限私有仓库，请使用专用、最小权限、可轮换的令牌
+  GITEE_TOKEN: ''
+
+  # 课程列表：多门用分号分隔，URL 后可跟 " # 名称"
+  MOOC_COURSES: ''
+
+  # Cookie 与邮件配置（按需填写）
+  MOOC_COOKIE: ''
+  # SMTP_HOST: ''
+  # SMTP_PORT: '465'
+  # SMTP_SECURE: 'true'
+  # SMTP_USER: ''
+  # SMTP_PASS: ''
+  # SMTP_FROM: ''
+  # NOTIFY_TO: ''
+
+stages:
+  - stage:
+      name: remind
+      displayName: 检测并发送提醒
+      strategy: naturally
+      trigger: auto
+      steps:
+        - step: build@nodejs
+          name: remind
+          displayName: 下载 Node 22 并执行
+          # 插件自带版本仅用于满足字段要求，实际使用下面下载的 Node 22
+          nodeVersion: 15.12.0
+          commands:
+            - |
+              set -e
+              NODE_VERSION=v22.11.0
+              case "$(uname -m)" in
+                x86_64|amd64) NODE_ARCH=x64 ;;
+                aarch64|arm64) NODE_ARCH=arm64 ;;
+                *) echo "不支持的架构: $(uname -m)"; exit 1 ;;
+              esac
+              TMP_DIR=$(mktemp -d)
+              TARBALL="$TMP_DIR/node.tar.gz"
+              URL1="https://npmmirror.com/mirrors/node/$NODE_VERSION/node-$NODE_VERSION-linux-$NODE_ARCH.tar.gz"
+              URL2="https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-linux-$NODE_ARCH.tar.gz"
+              if command -v curl >/dev/null 2>&1; then
+                curl -fsSL "$URL1" -o "$TARBALL" || curl -fsSL "$URL2" -o "$TARBALL"
+              else
+                wget -qO "$TARBALL" "$URL1" || wget -qO "$TARBALL" "$URL2"
+              fi
+              mkdir -p "$HOME/node20"
+              tar -xzf "$TARBALL" -C "$HOME/node20" --strip-components=1
+              export PATH="$HOME/node20/bin:$PATH"
+              node -v
+              npm -v
+              npm ci --registry=https://registry.npmmirror.com
+              node scripts/check.mjs
+              node scripts/notify.mjs
