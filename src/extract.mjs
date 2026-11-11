@@ -120,6 +120,9 @@ export function extractItems(dto, course) {
     const type = classifyType(node, test);
     const item = {
       id,
+      // test 子对象 id：互评状态查询（MocEvaluateBean.getEvaluateStatus）按它查，
+      // 与 node.id 不同（实测 node.id=1278567498 而同作业 test.id=1258594885）
+      testId: isObj(test) && test.id != null ? String(test.id) : '',
       title: name,
       type,
       // 章名 = 路径上第一个容器；单元名 = 最后一个容器（真实 DTO 有 章→节→小节
@@ -196,10 +199,17 @@ export function kindLabel(kind) {
  * 按时间窗筛出需要提醒的事件。
  * 每个条目最多产生两类事件：提交截止（deadline）与互评截止（evaluateEnd，仅启用互评的作业）。
  * @param {Array<object>} items
- * @param {object} opts { now?, windowHours, overdueDays } —— windowHours/overdueDays 必填
+ * @param {object} opts { now?, windowHours, overdueDays, evaluateMap? }
+ *   windowHours/overdueDays 必填；
+ *   evaluateMap 可选：testId → { stepEvaluated, stepSelfEvaluated, … }（见 src/evaluate.mjs）。
+ *   互评与自评都完成的条目视为互评义务已履行，不再产生互评提醒；
+ *   map 中缺失/查询失败的条目保持原行为（宁多提醒不漏提醒）。
  * @returns {{ due: Array, overdue: Array }}
  */
-export function collectDueEvents(items, { now = Date.now(), windowHours, overdueDays } = {}) {
+export function collectDueEvents(
+  items,
+  { now = Date.now(), windowHours, overdueDays, evaluateMap } = {}
+) {
   if (!Number.isFinite(windowHours) || !Number.isFinite(overdueDays)) {
     throw new Error('collectDueEvents 需要有效的 windowHours / overdueDays');
   }
@@ -223,6 +233,9 @@ export function collectDueEvents(items, { now = Date.now(), windowHours, overdue
     // 互评截止：只看启用互评的作业，且提交过才算有互评义务
     if (item.type === 'homework' && item.enableEvaluation && item.usedTryCount > 0) {
       if (item.scorePubStatus === 2) continue; // 已公布成绩，互评流程已结束
+      // 互评与自评都完成 → 互评义务已履行，不再提醒（状态缺失/失败时不抑制）
+      const status = evaluateMap && evaluateMap[item.testId || item.id];
+      if (status && status.stepEvaluated === true && status.stepSelfEvaluated === true) continue;
       if (item.evaluateEndMs > now && item.evaluateEndMs - now <= windowMs) {
         due.push({ item, kind: 'peerreview', dueMs: item.evaluateEndMs });
       } else if (item.evaluateEndMs <= now && now - item.evaluateEndMs <= overdueMs) {

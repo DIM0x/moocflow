@@ -7,7 +7,7 @@
 检测与发送解耦为两个独立步骤，通过约定文件 `reminders.json` 传递：
 
 1. 每天定时（北京时间 08:00 / 18:00）由 GitHub Actions 触发 workflow
-2. **步骤一（检测）** `scripts/check.mjs`：读取 `MOOC_COURSES`（仓库 Variable 或本地环境变量）里的课程 URL，解析为课程列表（URL 解析器移植自参考项目，三种路由通吃、排除论坛帖等伪课程链接），再用你提供的 Cookie 调用 `courseBean.getLastLearnedMocTermDto.rpc` 拉取整课 DTO，解析出全部测验/作业/考试及其截止时间、完成状态（SPOC 会自动解析关联的源课程，路由 term 与源课程 term 的内容都会抓取合并），把「N 小时内即将截止」和「已过期未完成」的事件写入 `reminders.json`（格式见 `src/report.mjs`）
+2. **步骤一（检测）** `scripts/check.mjs`：读取 `MOOC_COURSES`（仓库 Variable 或本地环境变量）里的课程 URL，解析为课程列表（URL 解析器移植自参考项目，三种路由通吃、排除论坛帖等伪课程链接），再用你提供的 Cookie 调用 `courseBean.getLastLearnedMocTermDto.rpc` 拉取整课 DTO，解析出全部测验/作业/考试及其截止时间、完成状态（SPOC 会自动解析关联的源课程，路由 term 与源课程 term 的内容都会抓取合并）。对「启用互评且已提交、成绩未公布」的作业，还会通过 `MocEvaluateBean.getEvaluateStatus.dwr`（见 `src/evaluate.mjs`）查询互评/自评完成状态——**互评与自评都完成的作业视为互评义务已履行，不再产生互评提醒**；userId 主来源为 Cookie 的 `NETEASE_WDA_UID`，缺失时回退到课程页 HTML 内嵌的 `webUser.id`。状态查询失败不影响提醒，退化为纯时间提醒。最后把「N 小时内即将截止」和「已过期未完成」的事件写入 `reminders.json`（格式见 `src/report.mjs`）
 3. **步骤二（发送）** `scripts/notify.mjs`：读取 `reminders.json`，按 `NOTIFY_CHANNEL` 分发到 `src/channels/` 下对应渠道发送
 
 ### 通知渠道
@@ -216,6 +216,7 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 - 未做跨次运行的去重（v1 每次运行窗口内的任务都会再提醒一次），提醒频率 = 运行频率
 - SPOC 课程会额外读取公开课程介绍页来定位关联的源课程；如果平台页面改版导致解析失败，日志会给出警告并退化为只抓路由 term
 - 测验的「已用尽尝试次数」或「得分>0」才视为完成；剩余尝试次数且未得分的测验会继续提醒（防止漏刷题）
+- 互评完成检测走 `MocEvaluateBean.getEvaluateStatus.dwr`（2026-11 实测逆向）：Cookie 主来源 `NETEASE_WDA_UID` 是统计 Cookie，个别浏览器环境可能没有——缺失时回退课程页 HTML 解析 `webUser.id`，两者都拿不到则跳过检测、保持纯时间提醒；SPOC 课程该 DWR 接口可用性未实测，失败同样退化为纯时间提醒；接口按显式 `(testId, userId)` 查询、不校验会话，若平台后续收紧鉴权，检测会静默退化为提醒（宁多不漏），可从日志「互评状态查询：N 份待查，成功 M 份」观察
 - `cnb` 渠道只在平台内留痕：CNB 官方未说明 issue 评论会触发站内信/邮件，需要可靠送达请用 `mail`
 - `gitlab` 渠道依赖个人访问令牌（极狐 SaaS 免费版不支持项目访问令牌），令牌默认最长 365 天，需安排轮换；CI_JOB_TOKEN 无写评论权限
 - `gitee` 渠道的令牌在 Gitee Go 中没有密文变量可放，只能明文保存，**因此必须使用私有仓库**；且 build@nodejs 最高只支持 Node 15，workflow 需在运行时下载 Node 22，构建环境必须能出网
