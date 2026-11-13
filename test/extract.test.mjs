@@ -190,3 +190,59 @@ test('formatRemaining 不出现 60 分进位瑕疵', () => {
   assert.equal(formatRemaining(now + 30 * 60000, now), '剩余 30 分钟');
   assert.equal(formatRemaining(now - 60000, now), '已截止');
 });
+
+test('extractItems 条目携带 testId(互评状态查询键)', () => {
+  const items = extractItems(makeDto(), course);
+  const byId = Object.fromEntries(items.map((i) => [i.id, i]));
+  assert.equal(byId.u2.testId, 't2'); // test 子对象 id,与 node.id(u2)不同
+});
+
+test('collectDueEvents 互评+自评完成则不再产生互评提醒', () => {
+  // 三份作业都在互评窗口内:tid1 互评+自评都完成,tid2 只完成自评,tid3 无状态数据
+  const dto = {
+    name: '测试课程',
+    chapters: [
+      {
+        lessons: [
+          {
+            units: [
+              {
+                id: 'hwdone', name: '互评完成作业', contentType: 3,
+                test: { id: 'tid1', type: 3, deadline: NOW - DAY, usedTryCount: 1,
+                        enableEvaluation: 1, evaluateEnd: NOW + 24 * HOUR, scorePubStatus: 0 }
+              },
+              {
+                id: 'hwhalf', name: '自评完成作业', contentType: 3,
+                test: { id: 'tid2', type: 3, deadline: NOW - DAY, usedTryCount: 1,
+                        enableEvaluation: 1, evaluateEnd: NOW + 24 * HOUR, scorePubStatus: 0 }
+              },
+              {
+                id: 'hwnone', name: '无状态作业', contentType: 3,
+                test: { id: 'tid3', type: 3, deadline: NOW - DAY, usedTryCount: 1,
+                        enableEvaluation: 1, evaluateEnd: NOW + 24 * HOUR, scorePubStatus: 0 }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+  const items = extractItems(dto, course);
+  const evaluateMap = {
+    tid1: { stepEvaluated: true, stepSelfEvaluated: true, stepSubmitted: true, stepTrained: false },
+    tid2: { stepEvaluated: false, stepSelfEvaluated: true, stepSubmitted: true, stepTrained: false }
+  };
+  const { due, overdue } = collectDueEvents(items, { now: NOW, windowHours: 72, overdueDays: 7, evaluateMap });
+  const peerKeys = due.filter((e) => e.kind === 'peerreview').map((e) => e.item.testId).sort();
+  // tid1 互评+自评都完成 → 抑制;tid2 仅自评 → 提醒;tid3 状态缺失 → 提醒(宁多不漏)
+  assert.deepEqual(peerKeys, ['tid2', 'tid3']);
+  // 互评抑制不影响提交截止类提醒:三份作业都已提交,不应有 submit 事件
+  assert.deepEqual(due.filter((e) => e.kind === 'submit').map((e) => e.item.id), []);
+  assert.deepEqual(overdue.map((e) => `${e.item.testId}:${e.kind}`).sort(), []);
+});
+
+test('collectDueEvents 不传 evaluateMap 时保持原有行为', () => {
+  const items = extractItems(makeDto(), course);
+  const { due } = collectDueEvents(items, { now: NOW, windowHours: 72, overdueDays: 7 });
+  assert.deepEqual(due.map((e) => `${e.item.id}:${e.kind}`).sort(), ['u1:submit', 'u2:peerreview']);
+});

@@ -25,6 +25,7 @@ import { resolve } from 'node:path';
 import { fetchTermDto, fetchSpocSourceTermId, AuthExpiredError } from '../src/icourse163.mjs';
 import { refreshCookie } from '../src/cookie.mjs';
 import { selectSecretStore } from '../src/secrets.mjs';
+import { resolveUserId, fetchEvaluateStatuses, pickPeerReviewItems } from '../src/evaluate.mjs';
 import { extractItems, collectDueEvents, kindLabel, formatBeijing, formatRemaining } from '../src/extract.mjs';
 import { buildReminderDoc } from '../src/report.mjs';
 import { parseCoursesInline } from '../src/courses.mjs';
@@ -238,8 +239,41 @@ async function main() {
 
   const { allItems, okCourses, failures } = result;
 
+  // 互评/自评完成检测：互评+自评都完成的作业不再产生互评提醒。
+  // userId 取不到或查询失败时 evaluateMap 为空，保持原有纯时间提醒（宁多提醒不漏提醒）。
+  let evaluateMap = {};
+  if (allItems.some((item) => item.type === 'homework' && item.enableEvaluation && item.usedTryCount > 0)) {
+    try {
+      const { userId, source } = await resolveUserId({ cookie, courses });
+      if (userId) {
+        console.log(`[moocflow] 用户 id=${userId}（来源：${source === 'cookie' ? 'Cookie' : '课程页'}）`);
+        evaluateMap = await fetchEvaluateStatuses({ cookie, items: allItems, userId });
+        const doneCount = Object.values(evaluateMap).filter(
+          (st) => st.stepEvaluated && st.stepSelfEvaluated
+        ).length;
+        const queryCount = Object.keys(evaluateMap).length;
+        console.log(
+          `[moocflow] 互评状态查询：${pickPeerReviewItems(allItems).length} 份待查，成功 ${queryCount} 份，互评+自评已完成 ${doneCount} 份`
+        );
+        for (const item of pickPeerReviewItems(allItems)) {
+          const st = evaluateMap[item.testId];
+          if (st && st.stepEvaluated && st.stepSelfEvaluated) {
+            const loc = [item.chapter, item.lesson].filter(Boolean).join(' / ');
+            console.log(
+              `[moocflow]   ✔ 互评已完成，不再提醒：[${item.courseName}] ${loc ? loc + ' · ' : ''}${item.title}`
+            );
+          }
+        }
+      } else {
+        console.warn('[moocflow] 无法确定用户 id，跳过互评完成检测（互评提醒保持原有行为）');
+      }
+    } catch (e) {
+      console.warn(`[moocflow] 互评完成检测失败（不影响其余提醒）：${e.message}`);
+    }
+  }
+
   const now = Date.now();
-  const { due, overdue } = collectDueEvents(allItems, { now, windowHours, overdueDays });
+  const { due, overdue } = collectDueEvents(allItems, { now, windowHours, overdueDays, evaluateMap });
 
   console.log(`\n[moocflow] ${courses.length} 门课程，成功 ${okCourses} 门，失败 ${failures.length} 门`);
   for (const f of failures) console.error(`[moocflow] 失败详情：${f}`);
