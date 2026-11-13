@@ -18,4 +18,8 @@ reminders.json
 
 # 记忆文件
 MEMORY.md
+
 tmp-diag/
+
+# 本机待办
+TODO.md
