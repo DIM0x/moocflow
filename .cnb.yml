@@ -30,8 +30,9 @@ main:
       #   - https://cnb.cool/<密钥仓库路径>/-/blob/main/moocflow.yml
 
       env:
-        # 通知渠道：cnb = 向 issue 追加/更新评论（平台内留痕，不保证邮件送达）
-        # 需要可靠送达请改成 mail，并配置 SMTP_*（见 README.agent.md）
+        # 通知渠道：cnb 渠道【已弃用】（2026-11-15 实测：issue 评论能发出，但
+        # 不会触发邮件/微信等任何站外通知，官方文档亦无此承诺），仅剩平台内
+        # 留痕价值。推荐改成 mail 并配置 SMTP_*（见 README.agent.md）。
         NOTIFY_CHANNEL: cnb
         REMINDERS_FILE: reminders.json
         REMINDER_ISSUE_NUMBER: "1"

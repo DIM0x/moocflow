@@ -18,7 +18,7 @@
 |---|---|---|---|
 | `github`（默认） | `channels/github.mjs` | 向你手动创建的提醒 issue 追加评论；你是该 issue 的参与者，GitHub 会把评论通知发到你账号的通知邮箱 | 零配置（`GITHUB_TOKEN`/`GITHUB_REPOSITORY` 由 Actions 自动提供；issue 编号非必填，默认 1） |
 | `mail` | `channels/mail.mjs` | SMTP 邮件 | `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`NOTIFY_TO` 等 |
-| `cnb` | `channels/cnb.mjs` | 向 CNB 仓库 issue 发布/更新提醒评论（**平台内留痕**；CNB 官方未说明评论会触发邮件通知，需要可靠送达用 `mail`） | `CNB_TOKEN`/`CNB_REPO_SLUG` 由 CNB 流水线自动注入，无需额外 token |
+| `cnb`（**已弃用**） | `channels/cnb.mjs` | 向 CNB 仓库 issue 发布/更新提醒评论。**2026-11-15 实测弃用：评论能正常发布，但不会触发邮件/微信等任何站外通知**（官方文档亦无此承诺），仅剩平台内留痕价值；CNB 用户请改用 `mail` 或流水线内 WPush/IM 插件 | `CNB_TOKEN`/`CNB_REPO_SLUG` 由 CNB 流水线自动注入，无需额外 token |
 | `gitlab` | `channels/gitlab.mjs` | 向 GitLab / 极狐 GitLab 仓库 issue 追加评论；issue 参与者会收到 "New comment" 通知（邮件/站内） | `GITLAB_TOKEN`（个人访问令牌，scope=`api`）；项目 ID/API 地址由 CI 自动提供 |
 | `gitee` | `channels/gitee.mjs` | 向 Gitee 仓库 issue 追加评论（评论会触发站内信；**邮件默认关闭，需收件人自行开启**） | `GITEE_TOKEN`（个人访问令牌）+ `GITEE_REPO_SLUG`（`owner/repo`） |
 
@@ -38,13 +38,16 @@
 
 ### CNB 接入（cnb.cool）
 
+> [!WARNING]
+> **`cnb` issue 通知渠道已弃用（2026-11-15 实测）**：提醒评论能正常发布，但实测**不会触发邮件、微信等任何站外通知**（CNB 官方文档也没有此承诺），渠道仅剩平台内留痕价值。在 CNB 部署请把 `NOTIFY_CHANNEL` 改为 `mail` 并配置 SMTP，或改用 CNB 插件市场的 WPush / 钉钉 / 飞书 / 企微插件。下文的 issue 配置仅为兼容已部署用户而保留。
+
 仓库根目录的 `.cnb.yml` 已配置好定时流水线（仅 crontab 触发，不随 push 运行）：
 
 1. **导入仓库**：在 CNB 创建仓库并导入本项目（CNB 读取的是 `main` 分支的 `.cnb.yml`；默认分支不同请改文件里的分支键）。
 2. **建提醒 issue**：在 CNB 仓库里手动创建一个 issue；编号复用 `REMINDER_ISSUE_NUMBER`（非必填，默认 `1`），不是 `1` 时改 `.cnb.yml` 的 `env`。
 3. **配置敏感信息**：CNB 没有 GitHub Secrets 那种仓库级密钥，官方做法是建一个「密钥仓库」（类型选密钥仓库，只能网页编辑），把 `MOOC_COOKIE`、`SMTP_*` 等写成键值对文件，然后取消 `.cnb.yml` 里 `imports:` 的注释并填入该文件 URL。非敏感项（如 `MOOC_COURSES`）直接写在 `env:` 里。
 4. **确认定时任务**：推送后到仓库「云原生构建 → 定时任务」确认同步成功（cron 为 `54 7,17 * * *`，CNB 固定使用北京时间，无需换算 UTC）。
-5. **通知方式**：默认 `NOTIFY_CHANNEL: cnb`（issue 评论留痕）。若需要可靠的邮件送达，改成 `mail` 并配置 SMTP——**CNB 官方文档没有说明 issue 评论会触发站内信或邮件**。
+5. **通知方式**：`.cnb.yml` 模板默认值仍是 `NOTIFY_CHANNEL: cnb`，但该渠道**已弃用**（实测评论不触发任何邮件/微信通知，见上方 WARNING）——推荐改成 `mail` 并配置 SMTP，或使用 CNB 插件市场的 WPush/IM 插件。
 
 > CNB issue 评论没有删除接口，`cnb` 渠道默认（`CNB_ISSUE_UPDATE_MODE=1`）覆盖更新最近一条自己发布的提醒评论，因此 `COMMENT_RETENTION_DAYS` 对它无效；把 `CNB_ISSUE_UPDATE_MODE` 设为 `0` 则每次只发新评论、不修改旧评论（issue 会逐渐变长）。本地调试时设置的 `CNB_TOKEN` 若对应用户不是 `cnb`，需把 `CNB_BOT_LOGIN` 设为该用户名，否则识别不到历史评论、每次都会新建。
 
@@ -181,7 +184,7 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `DUE_WINDOW_HOURS` | `48` | 即将截止提醒窗口（小时） |
 | `OVERDUE_DAYS` | `3` | 已过期任务仍在提醒范围内的天数 |
 | `REMINDERS_FILE` | `reminders.json` | 两步骤间传递的提醒文档路径（两步需一致） |
-| `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail` / `cnb` / `gitlab` / `gitee`；留空默认 `github` |
+| `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail` / `cnb`（已弃用，实测不触发站外通知） / `gitlab` / `gitee`；留空默认 `github` |
 | `REMINDER_ISSUE_NUMBER` | `1` | 手动创建的提醒 issue 编号（非必填；github / cnb / gitlab / gitee 渠道共用） |
 | `COMMENT_RETENTION_DAYS` | `7` | github / gitlab / gitee 渠道旧评论保留天数；`0` 表示只保留最新一条（cnb 渠道无删除接口，此项无效） |
 | `REPO_TOKEN` / `REPO_SLUG` | 可选 | 平台无关别名（等价 `GITHUB_TOKEN` / `GITHUB_REPOSITORY`，CNB 下可代替 `CNB_TOKEN` / `CNB_REPO_SLUG`，云效 + GitHub/Gitee 仓库时也用它）；平台原生变量优先 |
@@ -217,7 +220,7 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 - SPOC 课程会额外读取公开课程介绍页来定位关联的源课程；如果平台页面改版导致解析失败，日志会给出警告并退化为只抓路由 term
 - 测验的「已用尽尝试次数」或「得分>0」才视为完成；剩余尝试次数且未得分的测验会继续提醒（防止漏刷题）
 - 互评完成检测走 `MocEvaluateBean.getEvaluateStatus.dwr`（2026-11 实测逆向）：Cookie 主来源 `NETEASE_WDA_UID` 是统计 Cookie，个别浏览器环境可能没有——缺失时回退课程页 HTML 解析 `webUser.id`，两者都拿不到则跳过检测、保持纯时间提醒；SPOC 课程该 DWR 接口可用性未实测，失败同样退化为纯时间提醒；接口按显式 `(testId, userId)` 查询、不校验会话，若平台后续收紧鉴权，检测会静默退化为提醒（宁多不漏），可从日志「互评状态查询：N 份待查，成功 M 份」观察
-- `cnb` 渠道只在平台内留痕：CNB 官方未说明 issue 评论会触发站内信/邮件，需要可靠送达请用 `mail`
+- `cnb` 渠道**已弃用**（2026-11-15 实测）：issue 评论能发布，但不会触发邮件/微信等任何站外通知，只在平台内留痕；需要可靠送达请用 `mail`
 - `gitlab` 渠道依赖个人访问令牌（极狐 SaaS 免费版不支持项目访问令牌），令牌默认最长 365 天，需安排轮换；CI_JOB_TOKEN 无写评论权限
 - `gitee` 渠道的令牌在 Gitee Go 中没有密文变量可放，只能明文保存，**因此必须使用私有仓库**；且 build@nodejs 最高只支持 Node 15，workflow 需在运行时下载 Node 22，构建环境必须能出网
 - 云效 Codeup 仓库没有议题对象，**没有对应的 issue 渠道**；Codeup 用户只能使用 `mail`。仓库在 GitHub/Gitee、仅把 CI 放云效时，现有 `github`/`gitee` 渠道仍可用
