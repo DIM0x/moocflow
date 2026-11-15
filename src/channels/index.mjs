@@ -3,6 +3,8 @@
  *
  * 渠道按"平台"并列：每支持一个代码托管平台的 issue 通知，就多一个渠道名
  * （github / cnb / gitea / gitlab / …），由用户显式配置，不做自动探测。
+ * wechat / qq 是聚合渠道：内部按 WECHAT_CHANNELS / QQ_CHANNELS 显式配置的
+ * 顺序在多个推送服务子渠道（src/channels/push/）间 fallback。
  * 新增渠道：在 src/channels/ 下新建 <名字>.mjs 实现统一契约（见 mail.mjs 头注释）；
  * 其中 issue 评论类渠道用 issue-factory.mjs 的平台描述实现（参考 github.mjs），
  * 再在下面 import + 注册一行即可，scripts/notify.mjs 与检测逻辑零改动。
@@ -13,9 +15,11 @@ import * as github from './github.mjs';
 import * as cnb from './cnb.mjs';
 import * as gitlab from './gitlab.mjs';
 import * as gitee from './gitee.mjs';
+import * as wechat from './wechat.mjs';
+import * as qq from './qq.mjs';
 import { DEFAULTS } from '../config.mjs';
 
-const CHANNELS = { mail, github, cnb, gitlab, gitee };
+const CHANNELS = { mail, github, cnb, gitlab, gitee, wechat, qq };
 
 export const DEFAULT_CHANNEL = DEFAULTS.notifyChannel;
 
