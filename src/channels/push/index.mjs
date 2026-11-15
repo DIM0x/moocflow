@@ -16,9 +16,11 @@
 import * as serverchan from './serverchan.mjs';
 import * as pushplus from './pushplus.mjs';
 import * as wxpusher from './wxpusher.mjs';
+import * as qmsg from './qmsg.mjs';
+import * as qqbot from './qqbot.mjs';
 import { buildPushMessage } from './render.mjs';
 
-const SUBS = { serverchan, pushplus, wxpusher };
+const SUBS = { serverchan, pushplus, wxpusher, qmsg, qqbot };
 
 export function availableSubs() {
   return Object.keys(SUBS);

@@ -141,16 +141,27 @@ test('wechat 渠道契约：顺序未配或子渠道均未配置时降级为 sen
   assert.match(res2.detail, /SERVERCHAN_SENDKEY/);
 });
 
-test('qq 渠道契约：顺序未配时降级为 sent:false', async () => {
-  const res = await qq.deliver(makeDoc(), {}, NOW);
-  assert.equal(res.sent, false);
-  assert.match(res.detail, /未配置 QQ_CHANNELS/);
+test('qq 渠道契约：顺序未配或子渠道均未配置时降级为 sent:false', async () => {
+  const res1 = await qq.deliver(makeDoc(), {}, NOW);
+  assert.equal(res1.sent, false);
+  assert.match(res1.detail, /未配置 QQ_CHANNELS/);
+  const res2 = await qq.deliver(makeDoc(), { QQ_CHANNELS: 'qmsg,qqbot' }, NOW);
+  assert.equal(res2.sent, false);
+  assert.match(res2.detail, /子渠道均未配置所需变量/);
+  assert.match(res2.detail, /QMSG_KEY/);
 });
 
-test('聚合渠道 isConfigured：顺序已配且有子渠道可用才为 true', () => {
+test('聚合渠道 isConfigured：顺序已配且有子渠道可用才为 true', async () => {
   assert.equal(wechat.isConfigured({}), false);
   assert.equal(wechat.isConfigured({ WECHAT_CHANNELS: 'serverchan' }), false); // 缺 SendKey
   assert.equal(wechat.isConfigured({ WECHAT_CHANNELS: 'serverchan', SERVERCHAN_SENDKEY: 'k' }), true);
-  assert.equal(qq.isConfigured({}), false);
-  assert.equal(qq.isConfigured({ QQ_CHANNELS: 'qmsg' }), false); // 子渠道不存在或未配置
+  assert.equal(qq.isConfigured({ QQ_CHANNELS: 'qmsg' }), false); // 缺 key
+  assert.equal(qq.isConfigured({ QQ_CHANNELS: 'qmsg', QMSG_KEY: 'k' }), true);
+  assert.equal(qq.isConfigured({ QQ_CHANNELS: 'pushplus', PUSHPLUS_TOKEN: 't' }), true);
+  // wechat 子渠道不能出现在 qq 渠道的顺序里（targets 校验在 deliver 时抛错）
+  assert.equal(qq.isConfigured({ QQ_CHANNELS: 'serverchan', SERVERCHAN_SENDKEY: 'k' }), true);
+  await assert.rejects(
+    qq.deliver(makeDoc(), { QQ_CHANNELS: 'serverchan', SERVERCHAN_SENDKEY: 'k' }, NOW),
+    /子渠道不可用：serverchan/
+  );
 });
