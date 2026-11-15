@@ -21,6 +21,18 @@
 | `cnb`（**已弃用**） | `channels/cnb.mjs` | 向 CNB 仓库 issue 发布/更新提醒评论。**2026-11-15 实测弃用：评论能正常发布，但不会触发邮件/微信等任何站外通知**（官方文档亦无此承诺），仅剩平台内留痕价值；CNB 用户请改用 `mail` 或流水线内 WPush/IM 插件 | `CNB_TOKEN`/`CNB_REPO_SLUG` 由 CNB 流水线自动注入，无需额外 token |
 | `gitlab` | `channels/gitlab.mjs` | 向 GitLab / 极狐 GitLab 仓库 issue 追加评论；issue 参与者会收到 "New comment" 通知（邮件/站内） | `GITLAB_TOKEN`（个人访问令牌，scope=`api`）；项目 ID/API 地址由 CI 自动提供 |
 | `gitee` | `channels/gitee.mjs` | 向 Gitee 仓库 issue 追加评论（评论会触发站内信；**邮件默认关闭，需收件人自行开启**） | `GITEE_TOKEN`（个人访问令牌）+ `GITEE_REPO_SLUG`（`owner/repo`） |
+| `wechat` | `channels/wechat.mjs` | 聚合渠道：按 `WECHAT_CHANNELS` 显式顺序在子渠道间 fallback，推送到个人微信 | `WECHAT_CHANNELS`（顺序，必填）+ 所选子渠道的 key |
+| `qq` | `channels/qq.mjs` | 聚合渠道：按 `QQ_CHANNELS` 显式顺序在子渠道间 fallback，推送到 QQ | `QQ_CHANNELS`（顺序，必填）+ 所选子渠道的配置 |
+
+**wechat / qq 渠道（聚合 + 子渠道 fallback）**：`NOTIFY_CHANNEL=wechat` 或 `qq` 时，按 `WECHAT_CHANNELS` / `QQ_CHANNELS`（逗号分隔的子渠道顺序，必填）依次尝试已配置的子渠道：成功即止；某个子渠道失败（网络/HTTP 错误）打印警告并自动尝试下一个；全部失败才让 step 失败。顺序中只激活配置了对应 key 的子渠道，未配置的自动跳过。
+
+| 子渠道 | 聚合渠道 | 环境变量 | 说明与已知风险 |
+|---|---|---|---|
+| `serverchan`（Server酱 Turbo） | wechat | `SERVERCHAN_SENDKEY` | 关注「方糖」服务号接收；免费 5 条/天（失败也计数） |
+| `pushplus` | wechat + qq | `PUSHPLUS_TOKEN` | 微信渠道需**实名**（实名流程收费或开一个月会员替代），200 次/天；QQ 渠道用其共享机器人（扫码加好友绑定即可，无需自建），但**仅展示标题摘要**，正文不显示 |
+| `wxpusher` | wechat | `WXPUSHER_SPT` 或 `WXPUSHER_APP_TOKEN`+`WXPUSHER_UID` | 免费无每日条数限制；SPT 极简推送免建应用（扫官方二维码即得），标准推送需建应用+取 UID；多个接收方逗号分隔 |
+| `qmsg`（Qmsg酱） | qq | `QMSG_KEY`（可选 `QMSG_GROUP` 指定已绑定群） | 加其机器人好友并绑定；免费 500 条/日；**消息禁止 URL（代码已自动剥离课程链接）**；2026-08 曾整体停运约 2-3 个月后重启，建议不作唯一通道 |
+| `qqbot`（QQ 官方机器人） | qq | `QQ_BOT_APP_ID` / `QQ_BOT_SECRET` / `QQ_BOT_GROUP_OPENID` | 官方合规、无封号风险；`group_openid` 只能从群事件（群里 @机器人一次）中获取——本地跑一次临时回调脚本采集后永久复用，CI 之后纯 HTTP 发送；群主需开启「机器人主动发言」开关 |
 
 **github 渠道的首次设置**（一次性，约 2 分钟）：
 
@@ -184,7 +196,7 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `DUE_WINDOW_HOURS` | `48` | 即将截止提醒窗口（小时） |
 | `OVERDUE_DAYS` | `3` | 已过期任务仍在提醒范围内的天数 |
 | `REMINDERS_FILE` | `reminders.json` | 两步骤间传递的提醒文档路径（两步需一致） |
-| `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail` / `cnb`（已弃用，实测不触发站外通知） / `gitlab` / `gitee`；留空默认 `github` |
+| `NOTIFY_CHANNEL` | `github` | 通知方式：`github` / `mail` / `cnb`（已弃用，实测不触发站外通知） / `gitlab` / `gitee` / `wechat` / `qq`；留空默认 `github` |
 | `REMINDER_ISSUE_NUMBER` | `1` | 手动创建的提醒 issue 编号（非必填；github / cnb / gitlab / gitee 渠道共用） |
 | `COMMENT_RETENTION_DAYS` | `7` | github / gitlab / gitee 渠道旧评论保留天数；`0` 表示只保留最新一条（cnb 渠道无删除接口，此项无效） |
 | `REPO_TOKEN` / `REPO_SLUG` | 可选 | 平台无关别名（等价 `GITHUB_TOKEN` / `GITHUB_REPOSITORY`，CNB 下可代替 `CNB_TOKEN` / `CNB_REPO_SLUG`，云效 + GitHub/Gitee 仓库时也用它）；平台原生变量优先 |
@@ -211,6 +223,15 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `SMTP_USER` / `SMTP_PASS` | mail 渠道必填 | SMTP 账号与授权码（不是登录密码） |
 | `SMTP_FROM` | 同 `SMTP_USER` | 发件人地址 |
 | `NOTIFY_TO` | mail 渠道必填 | 收件人地址，多个用逗号分隔 |
+| `WECHAT_CHANNELS` | wechat 渠道必填 | 微信子渠道发送顺序，逗号分隔（如 `serverchan,wxpusher,pushplus`）；只列想启用的子渠道，未配置 key 的自动跳过 |
+| `QQ_CHANNELS` | qq 渠道必填 | QQ 子渠道发送顺序，逗号分隔（如 `qmsg,qqbot,pushplus`） |
+| `SERVERCHAN_SENDKEY` | serverchan 子渠道必填 | Server酱 SendKey（sct.ftqq.com 获取；免费 5 条/天，失败的请求也计入） |
+| `PUSHPLUS_TOKEN` | pushplus 子渠道必填 | PushPlus token（微信渠道需实名后才有额度；QQ 渠道用共享机器人） |
+| `WXPUSHER_SPT` | wxpusher 子渠道可选 | WxPusher SPT 极简推送令牌（免建应用）；多个接收方逗号分隔，与标准推送二选一 |
+| `WXPUSHER_APP_TOKEN` / `WXPUSHER_UID` | wxpusher 子渠道可选 | WxPusher 标准应用推送；UID 多个逗号分隔 |
+| `QMSG_KEY` | qmsg 子渠道必填 | Qmsg酱 API key（先加其机器人好友并绑定）；`QMSG_GROUP` 可选指定已绑定群号 |
+| `QQ_BOT_APP_ID` / `QQ_BOT_SECRET` | qqbot 子渠道必填 | QQ 开放平台机器人的 AppID 与 AppSecret |
+| `QQ_BOT_GROUP_OPENID` | qqbot 子渠道必填 | 群 openid（群成员 @机器人触发事件后从回调 payload 采集，本地一次性采集即可），多个群逗号分隔 |
 
 ## 已知边界
 
@@ -225,4 +246,9 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 - `gitee` 渠道的令牌在 Gitee Go 中没有密文变量可放，只能明文保存，**因此必须使用私有仓库**；且 build@nodejs 最高只支持 Node 15，workflow 需在运行时下载 Node 22，构建环境必须能出网
 - 云效 Codeup 仓库没有议题对象，**没有对应的 issue 渠道**；Codeup 用户只能使用 `mail`。仓库在 GitHub/Gitee、仅把 CI 放云效时，现有 `github`/`gitee` 渠道仍可用
 - github 渠道的通知邮件由 GitHub 派发，到达时间不可控；追求即时/可靠送达用 `mail` 渠道
+- `wechat` / `qq` 渠道的 fallback 只兜"单次发送失败"：某个子渠道服务整体停运（如 Qmsg酱 2026-08 停运 2-3 个月）会依次耗尽所有子渠道后让 step 失败，不会静默丢失，但当日提醒不会送达——重要场景叠加 `mail` 双保险需自行把 NOTIFY_CHANNEL 切回 mail
+- `pushplus` 未实名不能发送（实名流程收费，或开一个月会员免费实名）；额度政策可能变化，落地前复核
+- `qmsg` 消息禁止出现 URL（代码已自动剥离课程链接，只留文字提醒）；其内容审核对违规消息可能封 key
+- `qqbot` 依赖群主开启「机器人主动发言」开关；QQ 开放平台政策有波动（2025-04 曾移除主动消息、2026-06 以群主授权形式恢复），个人主体机器人暂不支持公开使用
+- GitHub Actions 境外网络访问国内推送端点（sctapi/pushplus/zjiecode/qmsg/qq API）可能偶发变慢或失败，fallback 链 + 保留 `mail` 兜底可提高送达率
 - 低活跃仓库的定时 workflow 可能被 GitHub 静默跳过（不排队、无运行记录）；若 Actions 页长期没有定时运行痕迹，先手动 Run workflow 验证配置本身无误

@@ -54,7 +54,9 @@ jobs:
 
       # 步骤二：发送。只读取上面的提醒文档，与检测逻辑解耦。
       # NOTIFY_CHANNEL=github（默认，见 src/config.mjs）：向手动创建的提醒 issue 追加评论，借 GitHub 通知邮件送达；
-      # NOTIFY_CHANNEL=mail：改走 SMTP 邮件。切换只需设置仓库 Variable NOTIFY_CHANNEL。
+      # NOTIFY_CHANNEL=mail：改走 SMTP 邮件；
+      # NOTIFY_CHANNEL=wechat / qq：推送到微信 / QQ（聚合渠道，按 WECHAT_CHANNELS / QQ_CHANNELS
+      # 的顺序在子渠道间 fallback）。切换只需设置仓库 Variable NOTIFY_CHANNEL。
       - name: Send notification
         env:
           # 仓库 Variable；留空时由 src/config.mjs 回退到默认渠道
@@ -74,4 +76,17 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SMTP_FROM: ${{ secrets.SMTP_FROM }}
           NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+          # wechat / qq 渠道所需（顺序变量非敏感放 Variable，key 类放 Secret）
+          WECHAT_CHANNELS: ${{ vars.WECHAT_CHANNELS }}
+          QQ_CHANNELS: ${{ vars.QQ_CHANNELS }}
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          WXPUSHER_SPT: ${{ secrets.WXPUSHER_SPT }}
+          WXPUSHER_APP_TOKEN: ${{ secrets.WXPUSHER_APP_TOKEN }}
+          WXPUSHER_UID: ${{ secrets.WXPUSHER_UID }}
+          QMSG_KEY: ${{ secrets.QMSG_KEY }}
+          QMSG_GROUP: ${{ secrets.QMSG_GROUP }}
+          QQ_BOT_APP_ID: ${{ secrets.QQ_BOT_APP_ID }}
+          QQ_BOT_SECRET: ${{ secrets.QQ_BOT_SECRET }}
+          QQ_BOT_GROUP_OPENID: ${{ secrets.QQ_BOT_GROUP_OPENID }}
         run: node scripts/notify.mjs

@@ -6,10 +6,12 @@
  *
  * 环境变量：
  *   REMINDERS_FILE    提醒文档路径（默认见 src/config.mjs，与检测步骤一致）
- *   NOTIFY_CHANNEL    通知方式：github（默认见 src/config.mjs，向 issue 追加评论）/ mail（SMTP 邮件）
+ *   NOTIFY_CHANNEL    通知方式：github（默认见 src/config.mjs，向 issue 追加评论）/ mail（SMTP 邮件）/
+ *                     wechat / qq（推送聚合渠道，按 WECHAT_CHANNELS / QQ_CHANNELS 顺序 fallback）
  *   github 渠道：GITHUB_TOKEN / GITHUB_REPOSITORY（Actions 自动提供）、
  *               REMINDER_ISSUE_NUMBER（用户手动创建的提醒 issue 编号，非必填，留空默认 1）
  *   mail 渠道：SMTP_* / NOTIFY_TO，见 src/channels/mail.mjs
+ *   wechat / qq 渠道：WECHAT_CHANNELS / QQ_CHANNELS 及各子渠道 key，见 src/channels/push/index.mjs
  *
  * 退出码：0 = 正常（含无提醒、渠道未配置时的打印降级）；1 = 文档缺失/损坏、
  *         方式名未知或渠道发送失败。
