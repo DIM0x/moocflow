@@ -14,9 +14,11 @@
  */
 
 import * as serverchan from './serverchan.mjs';
+import * as pushplus from './pushplus.mjs';
+import * as wxpusher from './wxpusher.mjs';
 import { buildPushMessage } from './render.mjs';
 
-const SUBS = { serverchan };
+const SUBS = { serverchan, pushplus, wxpusher };
 
 export function availableSubs() {
   return Object.keys(SUBS);

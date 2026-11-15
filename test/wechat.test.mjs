@@ -116,3 +116,150 @@ test('deliverOrdered：HTTP 200 但业务 code 非 0 也视为失败', async () 
     stub.restore();
   }
 });
+
+test('pushplus 子渠道：wechat 目标走 markdown 模板', async () => {
+  const stub = stubFetch((url) => okResponse({ code: 200, msg: '请求成功' }));
+  try {
+    const res = await wechat.deliver(
+      makeDoc(),
+      { WECHAT_CHANNELS: 'pushplus', PUSHPLUS_TOKEN: 'pp-token' },
+      NOW
+    );
+    assert.equal(res.sent, true);
+    assert.match(res.detail, /^pushplus：/);
+
+    const call = stub.calls[0];
+    assert.equal(call.url, 'https://www.pushplus.plus/send');
+    const body = JSON.parse(call.options.body);
+    assert.equal(body.token, 'pp-token');
+    assert.equal(body.template, 'markdown');
+    assert.equal(body.channel, undefined);
+    assert.match(body.title, /^\[MOOC提醒\]/);
+    assert.match(body.content, /共 1 项即将截止/);
+  } finally {
+    stub.restore();
+  }
+});
+
+test('pushplus 子渠道：code 非 200 视为失败', async () => {
+  const stub = stubFetch(() => okResponse({ code: 905, msg: '未实名' }));
+  try {
+    await assert.rejects(
+      wechat.deliver(makeDoc(), { WECHAT_CHANNELS: 'pushplus', PUSHPLUS_TOKEN: 't' }, NOW),
+      /code=905.*未实名/
+    );
+  } finally {
+    stub.restore();
+  }
+});
+
+test('wxpusher 子渠道：SPT 极简推送（多个 SPT 逐个发送）', async () => {
+  const stub = stubFetch((url) => okResponse({ code: 1000, msg: '处理成功' }));
+  try {
+    const res = await wechat.deliver(
+      makeDoc(),
+      { WECHAT_CHANNELS: 'wxpusher', WXPUSHER_SPT: 'SPT_a, SPT_b' },
+      NOW
+    );
+    assert.equal(res.sent, true);
+    assert.match(res.detail, /SPT 极简推送，2 个接收方/);
+
+    assert.equal(stub.calls.length, 2);
+    assert.equal(stub.calls[0].url, 'https://wxpusher.zjiecode.com/api/send/message/simple-push');
+    const body = JSON.parse(stub.calls[0].options.body);
+    assert.equal(body.spt, 'SPT_a');
+    assert.equal(body.contentType, 3);
+    assert.match(body.content, /共 1 项即将截止/);
+    assert.ok(body.summary.length <= 100);
+  } finally {
+    stub.restore();
+  }
+});
+
+test('wxpusher 子渠道：标准应用推送（appToken + 多 UID）', async () => {
+  const stub = stubFetch((url) => okResponse({ code: 1000, msg: '处理成功' }));
+  try {
+    const res = await wechat.deliver(
+      makeDoc(),
+      {
+        WECHAT_CHANNELS: 'wxpusher',
+        WXPUSHER_APP_TOKEN: 'AT_x',
+        WXPUSHER_UID: 'UID_1,UID_2'
+      },
+      NOW
+    );
+    assert.equal(res.sent, true);
+    assert.match(res.detail, /应用推送，2 个 UID/);
+
+    const body = JSON.parse(stub.calls[0].options.body);
+    assert.equal(stub.calls[0].url, 'https://wxpusher.zjiecode.com/api/send/message');
+    assert.equal(body.appToken, 'AT_x');
+    assert.deepEqual(body.uids, ['UID_1', 'UID_2']);
+    assert.equal(body.contentType, 3);
+  } finally {
+    stub.restore();
+  }
+});
+
+test('wxpusher 子渠道：code 非 1000 视为失败', async () => {
+  const stub = stubFetch(() => okResponse({ code: 1001, msg: 'content 超过最大限制' }));
+  try {
+    await assert.rejects(
+      wechat.deliver(makeDoc(), { WECHAT_CHANNELS: 'wxpusher', WXPUSHER_SPT: 'SPT_a' }, NOW),
+      /code=1001/
+    );
+  } finally {
+    stub.restore();
+  }
+});
+
+test('fallback：第一个子渠道失败自动降级到下一个，detail 指明成功者', async () => {
+  const stub = stubFetch((url) =>
+    url.includes('sctapi.ftqq.com')
+      ? errorResponse(400, '{"code":400,"message":"invalid key"}')
+      : okResponse({ code: 1000, msg: '处理成功' })
+  );
+  try {
+    const res = await wechat.deliver(
+      makeDoc(),
+      {
+        WECHAT_CHANNELS: 'serverchan,wxpusher',
+        SERVERCHAN_SENDKEY: 'bad',
+        WXPUSHER_SPT: 'SPT_a'
+      },
+      NOW
+    );
+    assert.equal(res.sent, true);
+    assert.match(res.detail, /^wxpusher：/);
+    // 第一个请求发给 Server酱，降级后第二个请求发给 WxPusher
+    assert.match(stub.calls[0].url, /sctapi\.ftqq\.com/);
+    assert.match(stub.calls[1].url, /wxpusher\.zjiecode\.com/);
+  } finally {
+    stub.restore();
+  }
+});
+
+test('fallback：全部子渠道失败时抛聚合错误（含每个失败原因）', async () => {
+  const stub = stubFetch(() => errorResponse(500, 'server error'));
+  try {
+    await assert.rejects(
+      wechat.deliver(
+        makeDoc(),
+        {
+          WECHAT_CHANNELS: 'serverchan,wxpusher',
+          SERVERCHAN_SENDKEY: 'k',
+          WXPUSHER_SPT: 'SPT_a'
+        },
+        NOW
+      ),
+      (e) => {
+        assert.match(e.message, /所有子渠道发送失败/);
+        assert.match(e.message, /serverchan：/);
+        assert.match(e.message, /wxpusher：/);
+        return true;
+      }
+    );
+  } finally {
+    stub.restore();
+  }
+});
