@@ -13,9 +13,12 @@
 #   - 仓库在 Codeup：云效没有仓库议题，只能 NOTIFY_CHANNEL=mail（配 SMTP_*）。
 #   - 仓库在 GitHub/Gitee/GitLab：可改为 github / gitee / gitlab，并在变量组里配
 #     REPO_TOKEN + REPO_SLUG（或各平台原生变量，如 GITEE_TOKEN / GITEE_REPO_SLUG）。
+#   - wechat / qq 聚合渠道也可用：NOTIFY_CHANNEL=wechat / qq，顺序变量
+#     WECHAT_CHANNELS / QQ_CHANNELS 放这里，子渠道 key（SERVERCHAN_SENDKEY 等，
+#     见 README.agent.md）放变量组。
 #
 # 私密变量：YAML 的 variables 不支持私密变量，MOOC_COOKIE / SMTP_PASS / REPO_TOKEN
-#   必须放在「变量组」里，并通过 variableGroups 关联。
+#   及各推送子渠道 key 必须放在「变量组」里，并通过 variableGroups 关联。
 #
 # Node 版本：云效公共集群的 NodeBuild 步骤可用版本未在公开文档中确认，模板改用
 #   Command 步骤在运行时下载 Node 22（与 GitHub/CNB/GitLab/Gitee 保持一致）。

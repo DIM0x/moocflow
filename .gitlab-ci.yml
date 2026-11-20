@@ -14,6 +14,8 @@
 #   MOOC_COOKIE  完整浏览器 Cookie 串，勾选 Masked
 #   MOOC_COURSES 课程列表（非敏感，可放 Variables）
 #   SMTP_* / NOTIFY_TO（改用 mail 渠道时需要）
+#   wechat / qq 渠道：WECHAT_CHANNELS / QQ_CHANNELS（顺序变量，必填）及所选
+#     子渠道的 key（SERVERCHAN_SENDKEY 等，见 README.agent.md「通知渠道」）
 #
 # 说明：
 #   - rules 只允许定时（schedule）与页面手动运行（web），push 不触发，

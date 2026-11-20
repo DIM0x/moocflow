@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { selectChannel, availableChannels, DEFAULT_CHANNEL } from '../src/channels/index.mjs';
 import * as github from '../src/channels/github.mjs';
 import * as mail from '../src/channels/mail.mjs';
+import * as wechat from '../src/channels/wechat.mjs';
+import * as qq from '../src/channels/qq.mjs';
 import { buildReminderDoc } from '../src/report.mjs';
 
 const NOW = Date.now();
@@ -29,7 +31,7 @@ test('selectChannel 渠道选择：默认 github、大小写不敏感、未知�
   assert.equal(selectChannel('').name, 'github');
   assert.equal(selectChannel('GITHUB').name, 'github');
   assert.equal(selectChannel(' mail ').name, 'mail');
-  assert.deepEqual(availableChannels().sort(), ['cnb', 'gitee', 'github', 'gitlab', 'mail']);
+  assert.deepEqual(availableChannels().sort(), ['cnb', 'gitee', 'github', 'gitlab', 'mail', 'qq', 'wechat']);
   assert.equal(DEFAULT_CHANNEL, 'github');
   let errMessage = '';
   try {
@@ -127,4 +129,39 @@ test('mail.deliver 未配置时降级为 sent:false', async () => {
   const res = await mail.deliver(makeDoc(), {}, NOW);
   assert.match(res.detail, /未配置 SMTP_HOST/);
   assert.equal(res.sent, false);
+});
+
+test('wechat 渠道契约：顺序未配或子渠道均未配置时降级为 sent:false', async () => {
+  const res1 = await wechat.deliver(makeDoc(), {}, NOW);
+  assert.equal(res1.sent, false);
+  assert.match(res1.detail, /未配置 WECHAT_CHANNELS/);
+  const res2 = await wechat.deliver(makeDoc(), { WECHAT_CHANNELS: 'serverchan' }, NOW);
+  assert.equal(res2.sent, false);
+  assert.match(res2.detail, /子渠道均未配置所需变量/);
+  assert.match(res2.detail, /SERVERCHAN_SENDKEY/);
+});
+
+test('qq 渠道契约：顺序未配或子渠道均未配置时降级为 sent:false', async () => {
+  const res1 = await qq.deliver(makeDoc(), {}, NOW);
+  assert.equal(res1.sent, false);
+  assert.match(res1.detail, /未配置 QQ_CHANNELS/);
+  const res2 = await qq.deliver(makeDoc(), { QQ_CHANNELS: 'qmsg,qqbot' }, NOW);
+  assert.equal(res2.sent, false);
+  assert.match(res2.detail, /子渠道均未配置所需变量/);
+  assert.match(res2.detail, /QMSG_KEY/);
+});
+
+test('聚合渠道 isConfigured：顺序已配且有子渠道可用才为 true', async () => {
+  assert.equal(wechat.isConfigured({}), false);
+  assert.equal(wechat.isConfigured({ WECHAT_CHANNELS: 'serverchan' }), false); // 缺 SendKey
+  assert.equal(wechat.isConfigured({ WECHAT_CHANNELS: 'serverchan', SERVERCHAN_SENDKEY: 'k' }), true);
+  assert.equal(qq.isConfigured({ QQ_CHANNELS: 'qmsg' }), false); // 缺 key
+  assert.equal(qq.isConfigured({ QQ_CHANNELS: 'qmsg', QMSG_KEY: 'k' }), true);
+  assert.equal(qq.isConfigured({ QQ_CHANNELS: 'pushplus', PUSHPLUS_TOKEN: 't' }), true);
+  // wechat 子渠道不能出现在 qq 渠道的顺序里（targets 校验在 deliver 时抛错）
+  assert.equal(qq.isConfigured({ QQ_CHANNELS: 'serverchan', SERVERCHAN_SENDKEY: 'k' }), true);
+  await assert.rejects(
+    qq.deliver(makeDoc(), { QQ_CHANNELS: 'serverchan', SERVERCHAN_SENDKEY: 'k' }, NOW),
+    /子渠道不可用：serverchan/
+  );
 });

@@ -52,6 +52,20 @@ variables:
   # SMTP_PASS: ''
   # SMTP_FROM: ''
   # NOTIFY_TO: ''
+  # wechat / qq 渠道（NOTIFY_CHANNEL=wechat / qq 时需要；顺序变量必填，
+  # 子渠道 key 见 README.agent.md「通知渠道」；Gitee Go 无密文变量，注意明文风险）
+  # WECHAT_CHANNELS: 'serverchan,wxpusher,pushplus'
+  # SERVERCHAN_SENDKEY: ''
+  # PUSHPLUS_TOKEN: ''
+  # WXPUSHER_SPT: ''
+  # WXPUSHER_APP_TOKEN: ''
+  # WXPUSHER_UID: ''
+  # QQ_CHANNELS: 'qmsg,qqbot,pushplus'
+  # QMSG_KEY: ''
+  # QMSG_GROUP: ''
+  # QQ_BOT_APP_ID: ''
+  # QQ_BOT_SECRET: ''
+  # QQ_BOT_GROUP_OPENID: ''
 
 stages:
   - stage:
