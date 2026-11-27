@@ -60,5 +60,8 @@ export function cookieRefreshNotice(cookieRefresh) {
   if (mode === 2) {
     return '检测到 Cookie 失效，系统已在本次运行中自动刷新，并将新 Cookie 存储到仓库 Secret。';
   }
+  if (mode === 3) {
+    return '检测到 Cookie 失效，系统已在本次运行中自动刷新，并通过 GitHub App 将新 Cookie 存储到仓库 Secret。';
+  }
   return null;
 }

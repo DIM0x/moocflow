@@ -55,7 +55,8 @@ test('resolveDetectionConfig 拒绝非法数字与刷新模式', () => {
   assert.throws(() => resolveDetectionConfig({ DUE_WINDOW_HOURS: 'abc' }), /DUE_WINDOW_HOURS/);
   assert.throws(() => resolveDetectionConfig({ DUE_WINDOW_HOURS: '-1' }), /DUE_WINDOW_HOURS/);
   assert.throws(() => resolveDetectionConfig({ OVERDUE_DAYS: 'x' }), /OVERDUE_DAYS/);
-  assert.throws(() => resolveDetectionConfig({ COOKIE_REFRESH_MODE: '3' }), /COOKIE_REFRESH_MODE/);
+  assert.equal(resolveDetectionConfig({ COOKIE_REFRESH_MODE: '3' }).refreshMode, 3);
+  assert.throws(() => resolveDetectionConfig({ COOKIE_REFRESH_MODE: '4' }), /COOKIE_REFRESH_MODE/);
   assert.throws(() => resolveDetectionConfig({ COOKIE_REFRESH_MODE: 'abc' }), /COOKIE_REFRESH_MODE/);
 });
 

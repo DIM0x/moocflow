@@ -93,6 +93,8 @@ test('两个渠道在自动刷新 Cookie 后于课程列表下方附带提示', 
   const github2 = github.buildCommentBody(makeDoc({ cookieRefresh: mode2 }), NOW);
   assert.match(github1, /🔔 即将截止[^\n]*\n\n> 🔑 检测到 Cookie 失效.*仓库 Secret 中的 Cookie 仍为已失效/);
   assert.match(github2, /> 🔑 检测到 Cookie 失效.*自动刷新，并将新 Cookie 存储到仓库 Secret/);
+  const github3 = github.buildCommentBody(makeDoc({ cookieRefresh: { mode: 3 } }), NOW);
+  assert.match(github3, /> 🔑 检测到 Cookie 失效.*GitHub App.*存储到仓库 Secret/);
 
   const mail1 = mail.renderPreview(makeDoc({ cookieRefresh: mode1 }), NOW);
   const mail2 = mail.renderPreview(makeDoc({ cookieRefresh: mode2 }), NOW);

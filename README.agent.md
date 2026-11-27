@@ -46,7 +46,7 @@
 
 **新增渠道**（钉钉/Telegram/PushPlus 等）：在 `src/channels/` 新建 `<名字>.mjs`，实现统一契约（`name` / `isConfigured` / `deliver` / `renderPreview`，见 `mail.mjs` 头注释），在 `channels/index.mjs` 注册一行即可，检测逻辑与其他渠道零改动。
 
-**新增代码托管平台的 issue 通知渠道**（Gitea/GitLab/Gitee 等）：平台的 issue 评论 API 差异（路径、鉴权头、bot 识别、字段映射）收敛为 `src/channels/issue-factory.mjs` 的平台描述对象，发布、翻页清理、渲染（`src/channels/render.mjs`）等通用流程零改动，参考 `github.mjs` / `cnb.mjs` 写一个描述对象并注册即可。工厂按平台能力自动选择策略：有 `updateRequest`（CNB 无删除接口）就覆盖更新同一条评论；有 `deleteRequest`（GitHub）就新建并按保留期清理；两者都没有就每次新建。各平台渠道彼此并列、由用户用 `NOTIFY_CHANNEL` 显式选择，不做平台自动探测。仓库坐标与令牌的环境变量解析在 `src/repo-env.mjs`（平台原生变量优先，通用别名 `REPO_SLUG`/`REPO_TOKEN` 兜底）；Cookie 写回 Secret 的平台实现在 `src/secrets.mjs`（`COOKIE_REFRESH_MODE=2` 用，当前仅 GitHub）。
+**新增代码托管平台的 issue 通知渠道**（Gitea/GitLab/Gitee 等）：平台的 issue 评论 API 差异（路径、鉴权头、bot 识别、字段映射）收敛为 `src/channels/issue-factory.mjs` 的平台描述对象，发布、翻页清理、渲染（`src/channels/render.mjs`）等通用流程零改动，参考 `github.mjs` / `cnb.mjs` 写一个描述对象并注册即可。工厂按平台能力自动选择策略：有 `updateRequest`（CNB 无删除接口）就覆盖更新同一条评论；有 `deleteRequest`（GitHub）就新建并按保留期清理；两者都没有就每次新建。各平台渠道彼此并列、由用户用 `NOTIFY_CHANNEL` 显式选择，不做平台自动探测。仓库坐标与令牌的环境变量解析在 `src/repo-env.mjs`（平台原生变量优先，通用别名 `REPO_SLUG`/`REPO_TOKEN` 兜底）；Cookie 写回 Secret 的平台实现在 `src/secrets.mjs`（`COOKIE_REFRESH_MODE=2`/`3` 用，当前仅 GitHub）。
 
 ### CNB 接入（cnb.cool）
 
@@ -117,10 +117,11 @@
 | `0` | 保持旧行为：不刷新，全部课程因鉴权失败时直接报错 |
 | `1`（默认） | 用 Cookie 里的 `STUDY_PERSIST` 静默重登；刷新后完成本次拉取和提醒，但**不保存**新 Cookie |
 | `2` | 同 `1`，并用 `MOOC_REFRESH_PAT` 调 GitHub API 覆盖保存 `MOOC_COOKIE` Secret |
+| `3` | 同 `2`，但用 GitHub App 安装令牌（`actions/create-github-app-token`）代替 PAT 写回 |
 
 触发条件：只有在“**所有实际拉取的课程都返回鉴权失败**”时才刷新；单门课程失败、网络错误、课程配置问题都不会触发。
 
-刷新发生时，提醒通知的课程列表下方会附带一条说明：模式 1 提示仓库 Secret 中的 Cookie 仍是已失效的旧值、需手动更新；模式 2 提示新 Cookie 已在本次运行中写回 Secret。
+刷新发生时，提醒通知的课程列表下方会附带一条说明：模式 1 提示仓库 Secret 中的 Cookie 仍是已失效的旧值、需手动更新；模式 2 提示新 Cookie 已在本次运行中写回 Secret；模式 3 提示已通过 GitHub App 写回。
 
 刷新链路（2026-11-02 实测）：
 
@@ -130,7 +131,7 @@ GET https://www.icourse163.org/  (Cookie 中带 STUDY_PERSIST)
   → 200 Set-Cookie: 新的 STUDY_SESS、轮换后的 STUDY_PERSIST、STUDY_INFO
 ```
 
-在 Actions 中，非敏感配置（`COOKIE_REFRESH_MODE`、`MOOC_COOKIE_SECRET_NAME`、`DUE_WINDOW_HOURS`、`OVERDUE_DAYS`、`NOTIFY_CHANNEL`、`REMINDERS_FILE`、`SMTP_SECURE`、`REMINDER_ISSUE_NUMBER`、`COMMENT_RETENTION_DAYS`）放在仓库 **Variables**；Cookie、PAT 以及 mail 渠道的 SMTP 项按现有 workflow 放在 **Secrets**（见步骤 3）。这些 Variable 留空时都回退到 `src/config.mjs` 的默认值。
+在 Actions 中，非敏感配置（`COOKIE_REFRESH_MODE`、`MOOC_APP_ID`、`MOOC_COOKIE_SECRET_NAME`、`DUE_WINDOW_HOURS`、`OVERDUE_DAYS`、`NOTIFY_CHANNEL`、`REMINDERS_FILE`、`SMTP_SECURE`、`REMINDER_ISSUE_NUMBER`、`COMMENT_RETENTION_DAYS`）放在仓库 **Variables**；Cookie、PAT、App 私钥以及 mail 渠道的 SMTP 项按现有 workflow 放在 **Secrets**（见步骤 3）。这些 Variable 留空时都回退到 `src/config.mjs` 的默认值。
 
 模式 2 的 PAT 要求：
 
@@ -140,7 +141,17 @@ GET https://www.icourse163.org/  (Cookie 中带 STUDY_PERSIST)
 - 存为仓库 Secret `MOOC_REFRESH_PAT`；
 - 本地运行模式 2 时还需设置 `GITHUB_REPOSITORY=owner/repo`（Actions 中自动提供；平台无关别名 `REPO_SLUG` 同样有效）。
 
-> PAT 能修改仓库 Secret，权限较高，请只授权本仓库并定期轮换。模式 2 失败（PAT 缺失/无权限）时脚本会直接报错，不会静默跳过保存。
+模式 3 的 GitHub App 要求（**每个用户自建 App**，私钥不可共享）：
+
+1. 个人 Settings → Developer settings → GitHub Apps → New GitHub App；Webhook 可关闭；
+2. Repository permissions 中把 **Secrets** 设为 **Read and write**；
+3. 安装（Install App）到自己的这个仓库，只选该仓库；
+4. 仓库 Variable `MOOC_APP_ID` 填 App ID（数字），仓库 Secret `MOOC_APP_PRIVATE_KEY` 填私钥 `.pem` 全文；
+5. workflow 仅在 `COOKIE_REFRESH_MODE=3` 时执行 `actions/create-github-app-token@v2` 生成安装令牌（1 小时有效，任务结束即吊销），通过 `MOOC_REFRESH_APP_TOKEN` 传给检测脚本，无需手动维护 token。
+
+模式 3 依赖 workflow 里的取令牌步骤，因此只在 GitHub Actions 中可用；本地运行模式 3 需自行提供有效的 `MOOC_REFRESH_APP_TOKEN`。
+
+> PAT / App 私钥都能修改仓库 Secret，权限较高，请只授权本仓库。不要把自己 App 的私钥交给别人——它会对该 App 的所有安装生效。模式 2/3 失败（凭据缺失/无权限）时脚本会直接报错，不会静默跳过保存。
 
 ## 使用步骤
 
@@ -162,6 +173,7 @@ GET https://www.icourse163.org/  (Cookie 中带 STUDY_PERSIST)
    |---|---|
    | `MOOC_COOKIE` | 上一步的完整 Cookie 串（两种渠道都必须） |
    | `MOOC_REFRESH_PAT` | 仅 `COOKIE_REFRESH_MODE=2` 需要：Fine-grained PAT，需目标仓库的 Secrets 读写权限 |
+   | `MOOC_APP_PRIVATE_KEY` | 仅 `COOKIE_REFRESH_MODE=3` 需要：自建 GitHub App 的私钥 `.pem` 全文（App ID 放 Variable `MOOC_APP_ID`） |
    | `SMTP_HOST` / `SMTP_PORT` | SMTP 服务器（如 QQ 邮箱 `smtp.qq.com` / `465`） |
    | `SMTP_USER` / `SMTP_PASS` | SMTP 账号与授权码（不是登录密码） |
    | `SMTP_FROM` | 可选，发件人地址，默认同 SMTP_USER |
@@ -189,9 +201,12 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `MOOC_COOKIE` | 必填（检测步骤） | 完整浏览器 Cookie 串（自动刷新需要其中包含 `STUDY_PERSIST`） |
-| `COOKIE_REFRESH_MODE` | `1` | Cookie 更新方式：`0` 不刷新 / `1` 刷新但仅本次使用 / `2` 刷新并写回 Secret |
+| `COOKIE_REFRESH_MODE` | `1` | Cookie 更新方式：`0` 不刷新 / `1` 刷新但仅本次使用 / `2` 刷新并写回 Secret（PAT） / `3` 刷新并写回 Secret（GitHub App） |
 | `MOOC_REFRESH_PAT` | 模式 `2` 必填 | Fine-grained PAT，目标仓库 Secrets 读写权限 |
-| `MOOC_COOKIE_SECRET_NAME` | `MOOC_COOKIE` | 模式 `2` 要覆盖保存的 Secret 名称 |
+| `MOOC_REFRESH_APP_TOKEN` | 模式 `3` 自动生成 | GitHub App 安装令牌（workflow 生成，1 小时有效）；本地运行模式 `3` 时需手动提供 |
+| `MOOC_APP_ID` | 模式 `3` 必填（Variable） | 自建 GitHub App 的 App ID（数字） |
+| `MOOC_APP_PRIVATE_KEY` | 模式 `3` 必填（Secret） | 自建 GitHub App 的私钥 `.pem` 全文 |
+| `MOOC_COOKIE_SECRET_NAME` | `MOOC_COOKIE` | 模式 `2`/`3` 要覆盖保存的 Secret 名称 |
 | `MOOC_COURSES` | 必填（检测步骤） | 课程列表（仓库 Variable 或本地环境变量）；多门用分号或换行分隔 |
 | `DUE_WINDOW_HOURS` | `48` | 即将截止提醒窗口（小时） |
 | `OVERDUE_DAYS` | `3` | 已过期任务仍在提醒范围内的天数 |
@@ -200,7 +215,7 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 | `REMINDER_ISSUE_NUMBER` | `1` | 手动创建的提醒 issue 编号（非必填；github / cnb / gitlab / gitee 渠道共用） |
 | `COMMENT_RETENTION_DAYS` | `7` | github / gitlab / gitee 渠道旧评论保留天数；`0` 表示只保留最新一条（cnb 渠道无删除接口，此项无效） |
 | `REPO_TOKEN` / `REPO_SLUG` | 可选 | 平台无关别名（等价 `GITHUB_TOKEN` / `GITHUB_REPOSITORY`，CNB 下可代替 `CNB_TOKEN` / `CNB_REPO_SLUG`，云效 + GitHub/Gitee 仓库时也用它）；平台原生变量优先 |
-| `COOKIE_SECRET_STORE` | `github` | 模式 `2` 的 Secret 写回实现（预留，见 `src/secrets.mjs`）；未知取值报错 |
+| `COOKIE_SECRET_STORE` | `github` | 模式 `2`/`3` 的 Secret 写回实现（预留，见 `src/secrets.mjs`）；未知取值报错 |
 | `CNB_TOKEN` | CNB 流水线自动注入 | CNB 临时令牌（`repo-notes:rw`）；本地调试时用个人访问令牌 |
 | `CNB_REPO_SLUG` / `CNB_API_ENDPOINT` | CNB 流水线自动注入 | 仓库路径（`group/repo`）与 API 地址；本地调试时手动设置 |
 | `CNB_TOKEN_USER_NAME` | CNB 流水线自动注入 | 令牌用户名（固定 `cnb`），用于识别自己发布的评论 |
@@ -235,7 +250,7 @@ NOTIFY_CHANNEL=mail node scripts/notify.mjs      # 步骤二：mail 渠道（未
 
 ## 已知边界
 
-- Cookie 会过期：模式 `0` 下提醒突然变空/报 `result 为空` 时需要重新抓一次 Cookie 更新 Secret；模式 `1`/`2` 会在全部课程鉴权失败时尝试用 `STUDY_PERSIST` 自动重登
+- Cookie 会过期：模式 `0` 下提醒突然变空/报 `result 为空` 时需要重新抓一次 Cookie 更新 Secret；模式 `1`/`2`/`3` 会在全部课程鉴权失败时尝试用 `STUDY_PERSIST` 自动重登
 - 自动刷新依赖 `STUDY_PERSIST`；如果它也失效（例如 30 天到期、改密、主动登出），仍需手动更新 Cookie
 - 未做跨次运行的去重（v1 每次运行窗口内的任务都会再提醒一次），提醒频率 = 运行频率
 - SPOC 课程会额外读取公开课程介绍页来定位关联的源课程；如果平台页面改版导致解析失败，日志会给出警告并退化为只抓路由 term

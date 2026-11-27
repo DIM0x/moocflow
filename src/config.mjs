@@ -49,8 +49,8 @@ function readRefreshMode(env) {
   const raw = env.COOKIE_REFRESH_MODE;
   if (raw == null || String(raw).trim() === '') return DEFAULTS.refreshMode;
   const value = Number(raw);
-  if (![0, 1, 2].includes(value)) {
-    throw new Error(`COOKIE_REFRESH_MODE 只能是 0/1/2（当前：${raw}）`);
+  if (![0, 1, 2, 3].includes(value)) {
+    throw new Error(`COOKIE_REFRESH_MODE 只能是 0/1/2/3（当前：${raw}）`);
   }
   return value;
 }

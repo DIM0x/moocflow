@@ -8,10 +8,12 @@
  * 环境变量（默认值统一定义在 src/config.mjs 的 DEFAULTS 中）：
  *   MOOC_COOKIE             完整浏览器 Cookie 串（必须；自动刷新需要其中的 STUDY_PERSIST）
  *   COOKIE_REFRESH_MODE     Cookie 更新方式：0=不刷新；1=刷新但只在本次运行使用；
- *                           2=刷新并按 COOKIE_SECRET_STORE 写回仓库 Secret
+ *                           2=刷新并按 COOKIE_SECRET_STORE 写回仓库 Secret（PAT）；
+ *                           3=同 2，但使用 GitHub App 安装令牌写回
  *   MOOC_REFRESH_PAT        模式 2 必填：Fine-grained PAT，需目标仓库 Secrets 读写权限
- *   MOOC_COOKIE_SECRET_NAME 模式 2 可覆盖的 Secret 名
- *   COOKIE_SECRET_STORE     模式 2 的 Secret 写回实现（默认 github，见 src/secrets.mjs）
+ *   MOOC_REFRESH_APP_TOKEN  模式 3 必填：GitHub App 安装令牌（由 workflow 生成）
+ *   MOOC_COOKIE_SECRET_NAME 模式 2/3 可覆盖的 Secret 名
+ *   COOKIE_SECRET_STORE     模式 2/3 的 Secret 写回实现（默认 github，见 src/secrets.mjs）
  *   MOOC_COURSES            课程列表（必填；仓库 Variable 或本地环境变量），多门用分号或换行分隔
  *   DUE_WINDOW_HOURS        即将截止窗口（小时）
  *   OVERDUE_DAYS            已过期但仍在提醒范围的天数
@@ -194,8 +196,8 @@ async function main() {
     process.exit(1);
   }
   const cookieSecretStore = selectSecretStore(env);
-  if (refreshMode === 2) {
-    const verdict = cookieSecretStore.validate(env);
+  if (refreshMode >= 2) {
+    const verdict = cookieSecretStore.validate(env, refreshMode);
     if (!verdict.ok) {
       console.error(`[moocflow] ${verdict.reason}`);
       process.exit(1);
@@ -219,10 +221,11 @@ async function main() {
       try {
         const refreshed = await refreshCookie({ cookie });
         console.error('[moocflow] Cookie 刷新成功，使用新 Cookie 重试课程…');
-        if (refreshMode === 2) {
+        if (refreshMode >= 2) {
           const updated = await cookieSecretStore.write(env, {
             name: cookieSecretName,
-            value: refreshed.cookie
+            value: refreshed.cookie,
+            mode: refreshMode
           });
           console.error(`[moocflow] 新 Cookie 已写入 ${cookieSecretStore.label}：${updated.name}`);
         } else {
